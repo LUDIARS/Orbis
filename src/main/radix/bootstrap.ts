@@ -33,6 +33,12 @@ import { registerBindingHandler } from '../ipc/handlers/register-binding-handler
 import { registerSettingsPaneHandler } from '../ipc/handlers/register-settings-pane-handler.js'
 import { registerRotaHandler } from '../ipc/handlers/register-rota-handler.js'
 import { RotaOverlayWindow } from '../rota/overlay-window.js'
+import { SigillumService } from '../sigillum/service.js'
+import { AuditLog } from '../vinculum/audit.js'
+import { createOrLoadToken } from '../vinculum/auth.js'
+import { OrbisVinculumOperations } from '../vinculum/orbis-operations.js'
+import { VinculumServer } from '../vinculum/server.js'
+import { registerSigillumHandler } from '../ipc/handlers/register-sigillum-handler.js'
 import { selectRotaCura, selectRotaPage } from '../rota/actions.js'
 import { buildRotaSnapshot } from '../rota/snapshot.js'
 import { filterRotaSnapshot } from '../rota/search.js'
@@ -82,15 +88,32 @@ export async function bootstrap(): Promise<void> {
       .then(() => executeAction(id, { window, cura: factory, rota }))
       .catch((error: unknown) => console.error('Action failed.', error))
   }
+  const sigillumService = new SigillumService(db)
+  sigillumService.revokeAll()
+  const auditLog = new AuditLog(db)
+  /** browserSigillum は起動ごとに再発行 (§7.2)。 */
+  const browserSigilla = new Map<string, string>()
+  const issueBrowserSigillum = (curaId: string): void => {
+    sigillumService.revokeBrowserSigilla(curaId)
+    browserSigilla.set(curaId, sigillumService.issue('browser', curaId, null))
+  }
   function createCura(): BrowserWindow {
-    return factory.create(service.create())
+    const cura = service.create()
+    issueBrowserSigillum(cura.id)
+    return factory.create(cura)
   }
   factory = new CuraWindowFactory(pageRepository, {
     onNewCura: () => createCura(),
     onCuraChanged: (cura) => service.update(cura),
     onWebContentsCreated: (window, webContents) => {
       registerLocalShortcuts(webContents, (id) => run(id, window), () => bindingStore.keyBindings())
-    }
+    },
+    onCuraClosed: (curaId) => {
+      sigillumService.revokeBrowserSigilla(curaId)
+      browserSigilla.delete(curaId)
+    },
+    onRevealUmbra: (curaId, pageId) => auditLog.record(sigillumService.forPage(curaId, pageId), 'user', 'reveal', { pageId }),
+    onPageClosed: (curaId, pageId) => sigillumService.revokePage(curaId, pageId)
   }, graphStore, habitusService, comparatioService, new FormaRegistry([amazonForma]))
 
   const resolveWindow = (senderId: number): BrowserWindow | undefined => factory.resolveUiWindow(senderId)
@@ -127,10 +150,19 @@ export async function bootstrap(): Promise<void> {
       )),
       close: () => rotaOverlay.close(),
       ready: () => rotaOverlay.rendererReady()
+    }),
+    registerSigillumHandler(resolveWindow, (window) => {
+      const info = factory.activePageInfo(window)
+      if (!info) return { browser: null, page: null }
+      return {
+        browser: browserSigilla.get(info.curaId) ?? null,
+        page: sigillumService.forPage(info.curaId, info.pageId)
+      }
     })
   ]
   app.once('before-quit', () => rotaOverlay.destroy())
   app.once('will-quit', () => {
+    void vinculum.stop().catch(() => undefined)
     unregisterGlobalShortcuts()
     for (const dispose of disposeIpc) dispose()
     for (const dispose of disposeSessionPermissions) dispose()
@@ -139,7 +171,21 @@ export async function bootstrap(): Promise<void> {
 
   const restored = service.list()
   if (restored.length === 0) createCura()
-  for (const cura of restored) factory.create(cura, pageRepository.listByCura(cura.id))
+  for (const cura of restored) {
+    issueBrowserSigillum(cura.id)
+    factory.create(cura, pageRepository.listByCura(cura.id))
+  }
+
+  /** @implements SPEC-ORBIS-P5-VINCULUM Cc 専用の loopback MCP ブリッジ。ポートは OS 採番し vinculum.json に書く。 */
+  const vinculum = new VinculumServer(
+    createOrLoadToken(db),
+    sigillumService,
+    auditLog,
+    new OrbisVinculumOperations(sigillumService, factory, pageRepository)
+  )
+  void vinculum.start(app.getPath('userData'))
+    .then((port) => console.log(`Vinculum is listening on 127.0.0.1:${port}`))
+    .catch((error: unknown) => console.error('Unable to start Vinculum.', error))
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createCura()

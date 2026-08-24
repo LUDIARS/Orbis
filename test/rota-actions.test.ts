@@ -18,7 +18,8 @@ const page = {
   title: 'Example',
   firstVisit: '2026-08-24T09:00:00.000Z',
   lastVisit: '2026-08-24T10:00:00.000Z',
-  active: true
+  active: true,
+  umbra: false
 }
 
 describe('Rota actions', () => {

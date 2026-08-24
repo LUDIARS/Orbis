@@ -1,6 +1,23 @@
 import { useEffect, useState, type FormEvent, type ReactElement } from 'react'
 import styles from './AddressBar.module.css'
 
+/** @implements SPEC-ORBIS-P5-SIGILLUM アドレスバー右端のスタンプ。pageSigillum をクリップボードへコピーする。 */
+function SigillumStamp(): ReactElement {
+  const [copied, setCopied] = useState(false)
+  const copy = async (): Promise<void> => {
+    const state = await window.orbis.sigillum()
+    if (!state.page) return
+    await navigator.clipboard.writeText(state.page)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1500)
+  }
+  return (
+    <button type="button" title="Copy the page sigillum" aria-label="Copy the page sigillum" onClick={() => { void copy().catch(() => setCopied(false)) }}>
+      {copied ? '✓' : '🪪'}
+    </button>
+  )
+}
+
 /** @implements SPEC-ORBIS-P0-RENDERER */
 export function AddressBar({ url }: { url: string }): ReactElement {
   const [value, setValue] = useState(url)
@@ -19,6 +36,7 @@ export function AddressBar({ url }: { url: string }): ReactElement {
       <button type="button" onClick={() => window.orbis.action('page.reload')}>↻</button>
       <input aria-label="Address" value={value} onChange={(event) => setValue(event.target.value)} />
       <button type="submit">Go</button>
+      <SigillumStamp />
     </form>
   )
 }

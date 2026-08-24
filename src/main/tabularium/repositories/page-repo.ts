@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 
-export type NavigationKind = 'navigate' | 'newview'
+export type NavigationKind = 'navigate' | 'newview' | 'llm'
 
 export interface Page {
   id: string
@@ -10,6 +10,7 @@ export interface Page {
   firstVisit: string
   lastVisit: string
   active: boolean
+  umbra: boolean
   content?: string
 }
 
@@ -20,7 +21,8 @@ const rowToPage = (row: Record<string, unknown>): Page => ({
   title: row.title as string,
   firstVisit: row.first_visit as string,
   lastVisit: row.last_visit as string,
-  active: Boolean(row.active)
+  active: Boolean(row.active),
+  umbra: Boolean(row.umbra)
 })
 
 /** @implements SPEC-ORBIS-P0-PERSISTENCE */
@@ -31,18 +33,19 @@ export class PageRepository {
     const { content: _content, ...row } = page
     this.db
       .prepare(
-        `INSERT INTO page (id, cura_id, url, title, first_visit, last_visit, active)
-         VALUES (@id, @curaId, @url, @title, @firstVisit, @lastVisit, @active)
+        `INSERT INTO page (id, cura_id, url, title, first_visit, last_visit, active, umbra)
+         VALUES (@id, @curaId, @url, @title, @firstVisit, @lastVisit, @active, @umbra)
          ON CONFLICT(id) DO UPDATE SET url = excluded.url, title = excluded.title,
-           last_visit = excluded.last_visit, active = excluded.active`
+           last_visit = excluded.last_visit, active = excluded.active, umbra = excluded.umbra`
       )
-      .run({ ...row, active: Number(page.active) })
+      .run({ ...row, active: Number(page.active), umbra: Number(page.umbra) })
     this.syncFts(page)
   }
 
   /** @implements SPEC-ORBIS-P1-NEXUS */
-  graphByCura(curaId: string): { nodes: { id: string; url: string; title: string; lastVisit: string }[]; edges: { from: string; to: string; kind: NavigationKind; count: number; lastAt: string }[] } {
-    const nodes = this.db.prepare('SELECT id, url, title, last_visit AS lastVisit FROM page WHERE cura_id = ? AND active = 1').all(curaId) as { id: string; url: string; title: string; lastVisit: string }[]
+  graphByCura(curaId: string): { nodes: { id: string; url: string; title: string; lastVisit: string; umbra: boolean }[]; edges: { from: string; to: string; kind: NavigationKind; count: number; lastAt: string }[] } {
+    const rows = this.db.prepare('SELECT id, url, title, last_visit AS lastVisit, umbra FROM page WHERE cura_id = ? AND active = 1').all(curaId) as { id: string; url: string; title: string; lastVisit: string; umbra: number }[]
+    const nodes = rows.map((row) => ({ ...row, umbra: Boolean(row.umbra) }))
     const edges = this.db.prepare('SELECT from_page_id AS "from", to_page_id AS "to", kind, count, last_at AS lastAt FROM edge WHERE cura_id = ?').all(curaId) as { from: string; to: string; kind: NavigationKind; count: number; lastAt: string }[]
     return { nodes, edges }
   }
@@ -55,7 +58,26 @@ export class PageRepository {
   }
 
   /** @implements SPEC-ORBIS-P1-INDAGATIO */
-  saveContent(page: Page, content: string): void { this.db.exec('BEGIN IMMEDIATE'); try { this.save({ ...page, content }); this.db.exec('COMMIT') } catch (error) { this.db.exec('ROLLBACK'); throw error } }
+  saveContent(page: Page, content: string): void {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.save({ ...page, content })
+      this.db.prepare(
+        `INSERT INTO page_content (page_id, content) VALUES (?, ?)
+         ON CONFLICT(page_id) DO UPDATE SET content = excluded.content`
+      ).run(page.id, content)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  /** @implements SPEC-ORBIS-P5-VINCULUM page 単位で保存した本文だけを orbis.read(text) から返す。 */
+  contentFor(pageId: string): string {
+    const row = this.db.prepare('SELECT content FROM page_content WHERE page_id = ?').get(pageId) as { content?: string } | undefined
+    return row?.content ?? ''
+  }
 
   listByCura(curaId: string): Page[] {
     const rows = this.db

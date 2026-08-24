@@ -8,10 +8,13 @@ const openMemoryDb = (): DatabaseSync => {
   const db = new DatabaseSync(':memory:')
   db.exec('PRAGMA foreign_keys = ON')
   db.exec(readFileSync('src/main/tabularium/migrations/0001_init.sql', 'utf8'))
+  db.exec(readFileSync('src/main/tabularium/migrations/0002_product_facts.sql', 'utf8'))
+  db.exec(readFileSync('src/main/tabularium/migrations/0003_sigillum.sql', 'utf8'))
+  db.exec(readFileSync('src/main/tabularium/migrations/0004_sigillum_active.sql', 'utf8'))
   return db
 }
 const cura: Cura = { id: 'cura', title: 'Cura', color: '#000', habitusId: null, alwaysOnTop: false, opacity: 1, createdAt: '2026-01-01', lastActiveAt: '2026-01-01' }
-const page = (id: string, url: string): Page => ({ id, curaId: 'cura', url, title: '', firstVisit: '2026-01-01', lastVisit: '2026-01-01', active: true })
+const page = (id: string, url: string): Page => ({ id, curaId: 'cura', url, title: '', firstVisit: '2026-01-01', lastVisit: '2026-01-01', active: true, umbra: false })
 
 describe('tabularium repositories', () => {
   it('restores a cura and only its active pages', () => {
@@ -53,6 +56,24 @@ describe('tabularium repositories', () => {
       expect(() => pages.recordNavigation('cura', 'missing', page('p1', 'https://example.com'))).toThrow()
       expect(db.prepare('SELECT count(*) AS n FROM page').get()?.n).toBe(0)
       expect(db.prepare('SELECT count(*) AS n FROM visit').get()?.n).toBe(0)
+    } finally {
+      db.close()
+    }
+  })
+
+  it('keeps readable page content isolated when two pages share a URL', () => {
+    const db = openMemoryDb()
+    try {
+      const curaRepository = new CuraRepository(db)
+      curaRepository.save(cura)
+      curaRepository.save({ ...cura, id: 'other' })
+      const pages = new PageRepository(db)
+      const first = page('p1', 'https://example.com')
+      const second = { ...page('p2', 'https://example.com'), curaId: 'other' }
+      pages.saveContent(first, 'first content')
+      pages.saveContent(second, 'second content')
+      expect(pages.contentFor(first.id)).toBe('first content')
+      expect(pages.contentFor(second.id)).toBe('second content')
     } finally {
       db.close()
     }

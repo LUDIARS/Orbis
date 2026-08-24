@@ -1,0 +1,1 @@
+{"name":"sigillum","description":"ブラウザ/ページ単位のセッション ID (印章) の発行と attach 管理。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/sigillum/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)test/sigillum-.*\\.test\\.ts$"}]}

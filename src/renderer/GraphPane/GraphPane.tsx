@@ -28,7 +28,7 @@ export function GraphPane({ state, hits, layout, collapsed, top, onSelect, onTog
       elements: [
         ...state.nodes.map((node) => ({
           data: { id: node.id, label: node.title.slice(0, 24) },
-          classes: [hits.includes(node.id) ? 'hit' : '', node.id === state.activePageId ? 'active' : '']
+          classes: [hits.includes(node.id) ? 'hit' : '', node.id === state.activePageId ? 'active' : '', node.umbra ? 'umbra' : '']
             .filter(Boolean)
             .join(' '),
           position: positions.get(node.id)
@@ -44,7 +44,9 @@ export function GraphPane({ state, hits, layout, collapsed, top, onSelect, onTog
         { selector: 'node.hit', style: { 'background-color': '#e264d3' } },
         { selector: 'node.active', style: { 'background-color': '#ffbd4a' } },
         { selector: 'edge', style: { width: 'mapData(count, 1, 5, 1, 5)', 'line-color': '#607d9c', 'target-arrow-color': '#607d9c', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier' } },
-        { selector: 'edge[kind = "newview"]', style: { 'line-style': 'dashed' } }
+        { selector: 'edge[kind = "newview"]', style: { 'line-style': 'dashed' } },
+        { selector: 'node.umbra', style: { opacity: 0.35 } },
+        { selector: 'edge[kind = "llm"]', style: { 'line-style': 'dotted', 'line-color': '#9c6bd8', 'target-arrow-color': '#9c6bd8' } }
       ]
     })
     graph.on('tap', 'node', (event) => onSelect(event.target.id()))

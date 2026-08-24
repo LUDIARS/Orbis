@@ -38,6 +38,7 @@ const bridge: OrbisBridge = {
   rotaSearch: (query) => ipcRenderer.send(channels.rotaSearch, query),
   rotaClose: () => ipcRenderer.send(channels.rotaClose),
   rotaReady: () => ipcRenderer.send(channels.rotaReady),
+  sigillum: () => ipcRenderer.invoke(channels.sigillum),
   ready: () => ipcRenderer.send(channels.ready),
   on: <K extends RendererEventName>(channel: K, listener: (value: RendererEventMap[K]) => void): (() => void) => {
     if (!rendererEvents.has(channel)) throw new TypeError(`Unsupported renderer event: ${channel}`)

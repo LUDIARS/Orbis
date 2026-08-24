@@ -1,0 +1,1 @@
+{"name":"umbra","description":"LLM が開く非描画ページの保持・上限・可視化 (reveal)。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/umbra/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)test/umbra-.*\\.test\\.ts$"}]}

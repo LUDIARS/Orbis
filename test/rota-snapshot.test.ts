@@ -3,8 +3,8 @@ import { buildRotaCura, sortRotaPages } from '../src/main/rota/snapshot.js'
 import { filterRotaSnapshot } from '../src/main/rota/search.js'
 
 const pages = [
-  { id: 'older', curaId: 'cura', url: 'https://old.example', title: 'Old', firstVisit: '1', lastVisit: '2026-08-24T09:00:00.000Z', active: true },
-  { id: 'newer', curaId: 'cura', url: 'https://new.example', title: 'New', firstVisit: '1', lastVisit: '2026-08-24T10:00:00.000Z', active: true }
+  { id: 'older', curaId: 'cura', url: 'https://old.example', title: 'Old', firstVisit: '1', lastVisit: '2026-08-24T09:00:00.000Z', active: true, umbra: false },
+  { id: 'newer', curaId: 'cura', url: 'https://new.example', title: 'New', firstVisit: '1', lastVisit: '2026-08-24T10:00:00.000Z', active: true, umbra: false }
 ]
 
 describe('Rota snapshot', () => {

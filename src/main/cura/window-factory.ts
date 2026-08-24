@@ -16,6 +16,7 @@ import { applyEmulation } from '../habitus/emulation.js'
 import { ComparatioService } from '../comparatio/service.js'
 import { FormaRegistry } from '../forma/registry.js'
 import { injectForma } from '../forma/injector.js'
+import { selectUmbraEvictions } from '../umbra/service.js'
 import {
   isAllowedNavigationUrl,
   normalizeDevelopmentRendererUrl,
@@ -33,6 +34,10 @@ interface CuraPage {
   initialFromPageId: string | null
   initialNavigationKind: NavigationKind
   habitusId: HabitusId
+  umbra: boolean
+  llmNavigationPending: boolean
+  /** pageSigillum は view ごとに安定 (§7.2)。page.id の再利用や URL 遷移から独立して解決する。 */
+  viewKey: string
 }
 
 /** Cura 1 つ = BrowserWindow 1 つ。各アクティブ page は固有の WebContentsView を持つ。 */
@@ -50,6 +55,9 @@ export interface CuraWindowFactoryHooks {
   onNewCura(): void
   onCuraChanged(cura: Cura): void
   onWebContentsCreated(window: BrowserWindow, webContents: WebContents): void
+  onCuraClosed?(curaId: string): void
+  onRevealUmbra?(curaId: string, pageId: string): void
+  onPageClosed?(curaId: string, pageId: string): void
 }
 
 /** @implements SPEC-ORBIS-P0-CURA */
@@ -113,7 +121,7 @@ export class CuraWindowFactory implements CuraController {
         alwaysOnTop: cura.alwaysOnTop,
         opacity: cura.opacity
       })
-      for (const page of restore) this.createPage(entry, page.url, null, 'navigate', page, false)
+      for (const page of restore.filter((candidate) => !candidate.umbra)) this.createPage(entry, page.url, null, 'navigate', page, false)
       const restoredPage = entry.pages[0]
       if (restoredPage) this.activatePage(entry, restoredPage)
       else this.createPage(entry, DEFAULT_URL)
@@ -122,7 +130,9 @@ export class CuraWindowFactory implements CuraController {
     window.on('closed', () => {
       for (const tab of entry.pages) {
         if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
+        this.hooks.onPageClosed?.(entry.cura.id, tab.viewKey)
       }
+      this.hooks.onCuraClosed?.(entry.cura.id)
       this.windows.delete(window.id)
     })
     return window
@@ -168,8 +178,31 @@ export class CuraWindowFactory implements CuraController {
 
   selectPage(window: BrowserWindow, pageId: string): void {
     const entry = this.entryOf(window)
-    const page = entry?.pages.find((candidate) => candidate.page.id === pageId)
-    if (entry && page) this.activatePage(entry, page)
+    if (!entry) return
+    const page = entry.pages.find((candidate) => candidate.page.id === pageId)
+    if (page && page.umbra) {
+      this.revealUmbra(entry, page)
+      return
+    }
+    if (page) {
+      this.activatePage(entry, page)
+      return
+    }
+    const stored = this.pageRepository.listByCura(entry.cura.id).find((candidate) => candidate.id === pageId)
+    if (stored?.umbra) {
+      const revealed = this.createPage(entry, stored.url, null, 'navigate', { ...stored, umbra: false })
+      if (revealed) this.hooks.onRevealUmbra?.(entry.cura.id, revealed.viewKey)
+    }
+  }
+
+  /** @implements SPEC-ORBIS-P5-UMBRA */
+  private revealUmbra(entry: CuraWindow, tab: CuraPage): void {
+    tab.umbra = false
+    tab.page = { ...tab.page, umbra: false }
+    this.pageRepository.save(tab.page)
+    this.updateGraph(entry, tab.page, null, 'navigate')
+    this.activatePage(entry, tab)
+    this.hooks.onRevealUmbra?.(entry.cura.id, tab.viewKey)
   }
 
   search(window: BrowserWindow, query: string): string[] { const entry = this.entryOf(window); return entry ? this.pageRepository.search(entry.cura.id, query) : [] }
@@ -263,10 +296,11 @@ export class CuraWindowFactory implements CuraController {
     entry.window.contentView.removeChildView(active.view)
     this.pageRepository.deactivate(active.page.id)
     if (!active.view.webContents.isDestroyed()) active.view.webContents.close()
+    this.hooks.onPageClosed?.(entry.cura.id, active.viewKey)
     entry.pages = entry.pages.filter((candidate) => candidate !== active)
     entry.activeViewId = null
 
-    const next = entry.pages.at(-1)
+    const next = [...entry.pages].reverse().find((candidate) => !candidate.umbra)
     if (next) this.activatePage(entry, next)
     else this.createPage(entry, DEFAULT_URL)
   }
@@ -298,6 +332,55 @@ export class CuraWindowFactory implements CuraController {
     return [...this.windows.values()].find((entry) => entry.cura.id === curaId)?.window
   }
 
+  /** @implements SPEC-ORBIS-P5-VINCULUM LLM が開く新規ページ。既定は Umbra (非描画)。 */
+  openLlmPage(curaId: string, url: string, visible: boolean): { pageId: string } {
+    const entry = [...this.windows.values()].find((candidate) => candidate.cura.id === curaId)
+    if (!entry) throw new Error('The Cura window is not open.')
+    const from = this.activePage(entry)?.page.id ?? null
+    const tab = this.createPage(entry, url, from, 'llm', undefined, visible, undefined, !visible, false)
+    if (!tab) throw new Error('The URL is invalid.')
+    this.sendGraph(entry)
+    return { pageId: tab.viewKey }
+  }
+
+  /** @implements SPEC-ORBIS-P5-VINCULUM 人間と同じ経路 (loadURL + commitNavigation) で遷移し、エッジは kind=llm で残す。 */
+  async navigateLlmPage(pageId: string, url: string): Promise<void> {
+    const found = this.findTab(pageId)
+    if (!found) throw new Error('The page is not open.')
+    const normalized = normalizeNavigationUrl(url)
+    found.tab.llmNavigationPending = true
+    try {
+      await found.tab.view.webContents.loadURL(normalized)
+    } finally {
+      found.tab.llmNavigationPending = false
+    }
+  }
+
+  pageWebContents(pageId: string): WebContents | undefined {
+    return this.findTab(pageId)?.tab.view.webContents
+  }
+
+  pageSummary(pageId: string): { pageId: string; curaId: string; url: string; title: string; umbra: boolean } | undefined {
+    const found = this.findTab(pageId)
+    if (!found) return undefined
+    return { pageId: found.tab.page.id, curaId: found.entry.cura.id, url: found.tab.page.url, title: found.tab.page.title, umbra: found.tab.umbra }
+  }
+
+  /** @implements SPEC-ORBIS-P5-SIGILLUM アドレスバーのスタンプ表示用。 */
+  activePageInfo(window: BrowserWindow): { curaId: string; pageId: string } | null {
+    const entry = this.entryOf(window)
+    const active = entry && this.activePage(entry)
+    return entry && active ? { curaId: entry.cura.id, pageId: active.viewKey } : null
+  }
+
+  private findTab(pageId: string): { entry: CuraWindow; tab: CuraPage } | undefined {
+    for (const entry of this.windows.values()) {
+      const tab = entry.pages.find((candidate) => candidate.page.id === pageId || candidate.viewKey === pageId)
+      if (tab) return { entry, tab }
+    }
+    return undefined
+  }
+
   private entryOf(window: BrowserWindow): CuraWindow | undefined {
     return this.windows.get(window.id)
   }
@@ -323,14 +406,16 @@ export class CuraWindowFactory implements CuraController {
     navigationKind: NavigationKind = 'navigate',
     restoredPage?: Page,
     activate = true,
-    forcedHabitusId?: HabitusId
-  ): void {
+    forcedHabitusId?: HabitusId,
+    umbra = false,
+    reuseExisting = true
+  ): CuraPage | undefined {
     let url: string
     try {
       url = normalizeNavigationUrl(value)
     } catch (error) {
       this.reportNavigationError(entry, error instanceof Error ? error.message : 'The URL is invalid.')
-      return
+      return undefined
     }
 
     const habitusId = forcedHabitusId
@@ -347,11 +432,11 @@ export class CuraWindowFactory implements CuraController {
     })
     const now = new Date().toISOString()
     const normalizedUrl = normalizeGraphUrl(url)
-    const existingPage = this.pageRepository.findActiveByUrl(entry.cura.id, normalizedUrl)
+    const existingPage = reuseExisting ? this.pageRepository.findActiveByUrl(entry.cura.id, normalizedUrl) : undefined
     const page: Page = restoredPage
-      ? { ...restoredPage, url, active: true }
+      ? { ...restoredPage, url, active: true, umbra }
       : existingPage
-        ? { ...existingPage, lastVisit: now }
+        ? { ...existingPage, lastVisit: now, umbra }
       : {
           id: randomUUID(),
           curaId: entry.cura.id,
@@ -359,7 +444,8 @@ export class CuraWindowFactory implements CuraController {
           title: url,
           firstVisit: now,
           lastVisit: now,
-          active: true
+          active: true,
+          umbra
         }
     const tab: CuraPage = {
       page,
@@ -367,7 +453,10 @@ export class CuraWindowFactory implements CuraController {
       hasCommittedNavigation: false,
       initialFromPageId: fromPageId,
       initialNavigationKind: navigationKind,
-      habitusId
+      habitusId,
+      umbra,
+      llmNavigationPending: false,
+      viewKey: randomUUID()
     }
     entry.pages.push(tab)
     if (preset.userAgent) view.webContents.setUserAgent(preset.userAgent)
@@ -394,17 +483,33 @@ export class CuraWindowFactory implements CuraController {
       void injectForma(view.webContents, this.formaRegistry, tab.habitusId).catch((error: unknown) => console.error('Unable to apply Forma.', error))
     })
 
-    if (activate) this.activatePage(entry, tab)
+    if (activate && !umbra) this.activatePage(entry, tab)
     else this.sendPages(entry)
+    if (umbra) this.enforceUmbraCap(entry)
     void view.webContents.loadURL(normalizedUrl).catch(() => {
       this.reportNavigationError(entry, 'Unable to load this URL.')
     })
+    return tab
+  }
+
+  /** @implements SPEC-ORBIS-P5-UMBRA 上限超過の Umbra view を古い順に閉じる。page 行と Nexus ノードは残す。 */
+  private enforceUmbraCap(entry: CuraWindow): void {
+    const evicted = selectUmbraEvictions(entry.pages.filter((tab) => tab.umbra).map((tab) => ({ pageId: tab.page.id, lastVisit: tab.page.lastVisit })))
+    if (evicted.length === 0) return
+    for (const pageId of evicted) {
+      const tab = entry.pages.find((candidate) => candidate.page.id === pageId)
+      if (tab && !tab.view.webContents.isDestroyed()) tab.view.webContents.close()
+      if (tab) this.hooks.onPageClosed?.(entry.cura.id, tab.viewKey)
+      entry.pages = entry.pages.filter((candidate) => candidate.page.id !== pageId)
+    }
   }
 
   private commitNavigation(entry: CuraWindow, tab: CuraPage, nextUrl: string): void {
     if (!isAllowedNavigationUrl(nextUrl)) return
     const now = new Date().toISOString()
     const normalizedUrl = normalizeGraphUrl(nextUrl)
+    const followKind: NavigationKind = tab.llmNavigationPending ? 'llm' : 'navigate'
+    tab.llmNavigationPending = false
 
     if (!tab.hasCommittedNavigation) {
       const committedPage = {
@@ -445,13 +550,14 @@ export class CuraWindowFactory implements CuraController {
       title: tab.view.webContents.getTitle() || normalizedUrl,
       firstVisit: now,
       lastVisit: now,
-      active: true
+      active: true,
+      umbra: tab.umbra
     }
     const existingPage = this.pageRepository.findActiveByUrl(entry.cura.id, normalizedUrl)
-    const resolvedPage = existingPage ? { ...existingPage, lastVisit: now } : nextPage
-    this.pageRepository.recordNavigation(entry.cura.id, previousPage.id, resolvedPage, 'navigate', !existingPage)
+    const resolvedPage = existingPage ? { ...existingPage, lastVisit: now, umbra: tab.umbra } : nextPage
+    this.pageRepository.recordNavigation(entry.cura.id, previousPage.id, resolvedPage, followKind, !existingPage)
     tab.page = resolvedPage
-    this.updateGraph(entry, resolvedPage, resolveNavigationParent(true, previousPage.id, null), 'navigate')
+    this.updateGraph(entry, resolvedPage, resolveNavigationParent(true, previousPage.id, null), followKind)
     this.sendPages(entry)
     this.sendGraph(entry)
   }
@@ -470,7 +576,7 @@ export class CuraWindowFactory implements CuraController {
   private sendPages(entry: CuraWindow): void {
     if (entry.window.isDestroyed() || entry.window.webContents.isDestroyed()) return
     entry.window.webContents.send(channels.pages, {
-      pages: entry.pages.map(({ page }) => ({ id: page.id, title: page.title, url: page.url })),
+      pages: entry.pages.filter((tab) => !tab.umbra).map(({ page }) => ({ id: page.id, title: page.title, url: page.url })),
       activePageId: this.activePage(entry)?.page.id ?? null
     })
   }
@@ -492,6 +598,7 @@ export class CuraWindowFactory implements CuraController {
     const wasActive = this.activePage(entry) === tab
     entry.window.contentView.removeChildView(tab.view)
     if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
+    this.hooks.onPageClosed?.(entry.cura.id, tab.viewKey)
     entry.pages = entry.pages.filter((candidate) => candidate !== tab)
     this.createPage(
       entry,
@@ -500,7 +607,8 @@ export class CuraWindowFactory implements CuraController {
       tab.initialNavigationKind,
       tab.page,
       wasActive,
-      habitusId
+      habitusId,
+      tab.umbra
     )
   }
 
@@ -511,7 +619,7 @@ export class CuraWindowFactory implements CuraController {
   }
 
   private updateGraph(entry: CuraWindow, page: Page, fromPageId: string | null, kind: NavigationKind): void {
-    this.graphStore.addNode(entry.cura.id, { id: page.id, url: page.url, title: page.title, lastVisit: page.lastVisit })
+    this.graphStore.addNode(entry.cura.id, { id: page.id, url: page.url, title: page.title, lastVisit: page.lastVisit, umbra: page.umbra })
     if (!fromPageId) return
     this.graphStore.addEdge(entry.cura.id, { from: fromPageId, to: page.id, kind, count: 1, lastAt: page.lastVisit })
   }

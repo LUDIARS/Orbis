@@ -31,7 +31,8 @@ export const channels = {
   rotaSelectPage: 'orbis:rota-select-page',
   rotaSearch: 'orbis:rota-search',
   rotaClose: 'orbis:rota-close',
-  rotaReady: 'orbis:rota-ready'
+  rotaReady: 'orbis:rota-ready',
+  sigillum: 'orbis:sigillum'
 } as const
 
 export interface PageViewState {
@@ -49,8 +50,10 @@ export interface FenestraViewState {
   alwaysOnTop: boolean
   opacity: number
 }
-export interface GraphNodeView { id: string; url: string; title: string; lastVisit: string }
-export interface GraphEdgeView { from: string; to: string; kind: 'navigate' | 'newview'; count: number; lastAt: string }
+export interface GraphNodeView { id: string; url: string; title: string; lastVisit: string; umbra?: boolean }
+export interface GraphEdgeView { from: string; to: string; kind: 'navigate' | 'newview' | 'llm'; count: number; lastAt: string }
+/** @implements SPEC-ORBIS-P5-SIGILLUM */
+export interface SigillumViewState { browser: string | null; page: string | null }
 export interface GraphViewState { nodes: GraphNodeView[]; edges: GraphEdgeView[]; activePageId: string | null }
 export interface SearchResult { pageIds: string[] }
 export type GraphLayout = 'force' | 'timeline'
@@ -126,6 +129,7 @@ export interface OrbisBridge {
   rotaSearch(query: string): void
   rotaClose(): void
   rotaReady(): void
+  sigillum(): Promise<SigillumViewState>
   ready(): void
   on<K extends RendererEventName>(channel: K, listener: (value: RendererEventMap[K]) => void): () => void
 }

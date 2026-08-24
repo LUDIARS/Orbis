@@ -1,0 +1,1 @@
+{"name":"vinculum","description":"Cc 専用の loopback MCP ブリッジ。認証・監査・CDP 操作を含む。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/vinculum/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)scripts/vinculum-client\\.mjs$"},{"pathPattern":"(^|/)test/vinculum-.*\\.test\\.ts$"}]}
