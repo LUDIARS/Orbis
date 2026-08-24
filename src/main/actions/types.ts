@@ -14,6 +14,8 @@ export interface CuraController {
   toggleAlwaysOnTop(window: BrowserWindow): void
   cycleOpacity(window: BrowserWindow): void
   minimizeOthers(): void
+  focusSearch(window: BrowserWindow): void
+  toggleGraphLayout(window: BrowserWindow): void
 }
 
 export interface ActionContext {

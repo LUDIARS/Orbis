@@ -7,6 +7,8 @@ import { pageClose } from './page-close.js'
 import { pageForward } from './page-forward.js'
 import { pageNew } from './page-new.js'
 import { pageReload } from './page-reload.js'
+import { indagatioOpen } from './indagatio-open.js'
+import { nexusLayoutToggle } from './nexus-layout-toggle.js'
 import type { Action, ActionContext, ActionId } from './types.js'
 
 const actions: Record<ActionId, Action> = {
@@ -18,7 +20,9 @@ const actions: Record<ActionId, Action> = {
   'cura.new': curaNew,
   'fenestra.alwaysOnTop.toggle': fenestraAlwaysOnTopToggle,
   'fenestra.minimizeOthers': fenestraMinimizeOthers,
-  'fenestra.opacity.cycle': fenestraOpacityCycle
+  'fenestra.opacity.cycle': fenestraOpacityCycle,
+  'indagatio.open': indagatioOpen,
+  'nexus.layout.toggle': nexusLayoutToggle
 }
 
 /** @implements SPEC-ORBIS-P0-ACTIONS */

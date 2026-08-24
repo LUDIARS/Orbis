@@ -6,6 +6,10 @@ import { applyAlwaysOnTop, applyOpacity, minimizeNonPinned } from '../fenestra/a
 import { channels } from '../ipc/channels.js'
 import type { Cura } from '../tabularium/repositories/cura-repo.js'
 import type { NavigationKind, Page, PageRepository } from '../tabularium/repositories/page-repo.js'
+import type { GraphLayout } from '../../shared/ipc-contract.js'
+import { GraphStore } from '../nexus/graph-store.js'
+import { resolveNavigationParent } from '../nexus/navigation-tracker.js'
+import { normalizeGraphUrl } from '../nexus/url-normalizer.js'
 import {
   isAllowedNavigationUrl,
   normalizeDevelopmentRendererUrl,
@@ -13,6 +17,7 @@ import {
 } from './navigation-url.js'
 
 const TOOLBAR_HEIGHT = 88
+const GRAPH_PANE_WIDTH = 300
 const DEFAULT_URL = 'https://example.com'
 
 interface CuraPage {
@@ -29,6 +34,7 @@ interface CuraWindow {
   window: BrowserWindow
   pages: CuraPage[]
   activeViewId: number | null
+  graphPaneCollapsed: boolean
 }
 
 export interface CuraWindowFactoryHooks {
@@ -43,7 +49,8 @@ export class CuraWindowFactory implements CuraController {
 
   constructor(
     private readonly pageRepository: PageRepository,
-    private readonly hooks: CuraWindowFactoryHooks
+    private readonly hooks: CuraWindowFactoryHooks,
+    private readonly graphStore: GraphStore
   ) {}
 
   create(cura: Cura, restore: Page[] = []): BrowserWindow {
@@ -63,7 +70,8 @@ export class CuraWindowFactory implements CuraController {
         sandbox: true
       }
     })
-    const entry: CuraWindow = { cura, window, pages: [], activeViewId: null }
+    const entry: CuraWindow = { cura, window, pages: [], activeViewId: null, graphPaneCollapsed: false }
+    this.graphStore.restore(cura.id, this.pageRepository.graphByCura(cura.id))
     this.windows.set(window.id, entry)
     this.hooks.onWebContentsCreated(window, window.webContents)
 
@@ -144,6 +152,12 @@ export class CuraWindowFactory implements CuraController {
     const page = entry?.pages.find((candidate) => candidate.page.id === pageId)
     if (entry && page) this.activatePage(entry, page)
   }
+
+  search(window: BrowserWindow, query: string): string[] { const entry = this.entryOf(window); return entry ? this.pageRepository.search(entry.cura.id, query) : [] }
+  setGraphPane(window: BrowserWindow, collapsed: boolean, _layout?: GraphLayout): void { const entry = this.entryOf(window); if (!entry) return; entry.graphPaneCollapsed = collapsed; this.layoutView(entry) }
+  focusSearch(window: BrowserWindow): void { window.webContents.send(channels.focusSearch) }
+  toggleGraphLayout(window: BrowserWindow): void { window.webContents.send(channels.toggleGraphLayout) }
+  savePageContent(senderId: number, content: string): void { for (const entry of this.windows.values()) { const tab = entry.pages.find((item) => item.view.webContents.id === senderId); if (tab) { this.pageRepository.saveContent(tab.page, content); return } } }
 
   goBack(window: BrowserWindow): void {
     const entry = this.entryOf(window)
@@ -240,15 +254,19 @@ export class CuraWindowFactory implements CuraController {
     }
 
     const view = new WebContentsView({
-      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
+      webPreferences: { preload: join(__dirname, '../preload/page-bridge.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
     })
     const now = new Date().toISOString()
+    const normalizedUrl = normalizeGraphUrl(url)
+    const existingPage = this.pageRepository.findActiveByUrl(entry.cura.id, normalizedUrl)
     const page: Page = restoredPage
       ? { ...restoredPage, url, active: true }
+      : existingPage
+        ? { ...existingPage, lastVisit: now }
       : {
           id: randomUUID(),
           curaId: entry.cura.id,
-          url,
+      url: normalizedUrl,
           title: url,
           firstVisit: now,
           lastVisit: now,
@@ -281,7 +299,7 @@ export class CuraWindowFactory implements CuraController {
 
     if (activate) this.activatePage(entry, tab)
     else this.sendPages(entry)
-    void view.webContents.loadURL(url).catch(() => {
+    void view.webContents.loadURL(normalizedUrl).catch(() => {
       this.reportNavigationError(entry, 'Unable to load this URL.')
     })
   }
@@ -289,12 +307,13 @@ export class CuraWindowFactory implements CuraController {
   private commitNavigation(entry: CuraWindow, tab: CuraPage, nextUrl: string): void {
     if (!isAllowedNavigationUrl(nextUrl)) return
     const now = new Date().toISOString()
+    const normalizedUrl = normalizeGraphUrl(nextUrl)
 
     if (!tab.hasCommittedNavigation) {
       const committedPage = {
         ...tab.page,
-        url: nextUrl,
-        title: tab.view.webContents.getTitle() || nextUrl,
+        url: normalizedUrl,
+        title: tab.view.webContents.getTitle() || normalizedUrl,
         lastVisit: now
       }
       this.pageRepository.recordNavigation(
@@ -304,12 +323,13 @@ export class CuraWindowFactory implements CuraController {
         tab.initialNavigationKind
       )
       tab.page = committedPage
+      this.updateGraph(entry, committedPage, tab.initialFromPageId, tab.initialNavigationKind)
       tab.hasCommittedNavigation = true
       this.sendPages(entry)
       return
     }
 
-    if (tab.page.url === nextUrl) {
+    if (tab.page.url === normalizedUrl) {
       const reloadedPage = { ...tab.page, lastVisit: now }
       this.pageRepository.recordNavigation(entry.cura.id, null, reloadedPage)
       tab.page = reloadedPage
@@ -321,15 +341,19 @@ export class CuraWindowFactory implements CuraController {
     const nextPage: Page = {
       id: randomUUID(),
       curaId: entry.cura.id,
-      url: nextUrl,
-      title: tab.view.webContents.getTitle() || nextUrl,
+      url: normalizedUrl,
+      title: tab.view.webContents.getTitle() || normalizedUrl,
       firstVisit: now,
       lastVisit: now,
       active: true
     }
-    this.pageRepository.recordNavigation(entry.cura.id, previousPage.id, nextPage, 'navigate', true)
-    tab.page = nextPage
+    const existingPage = this.pageRepository.findActiveByUrl(entry.cura.id, normalizedUrl)
+    const resolvedPage = existingPage ? { ...existingPage, lastVisit: now } : nextPage
+    this.pageRepository.recordNavigation(entry.cura.id, previousPage.id, resolvedPage, 'navigate', !existingPage)
+    tab.page = resolvedPage
+    this.updateGraph(entry, resolvedPage, resolveNavigationParent(true, previousPage.id, null), 'navigate')
     this.sendPages(entry)
+    this.sendGraph(entry)
   }
 
   private activatePage(entry: CuraWindow, page: CuraPage): void {
@@ -350,6 +374,9 @@ export class CuraWindowFactory implements CuraController {
     })
   }
 
+  private sendGraph(entry: CuraWindow): void { if (!entry.window.isDestroyed() && !entry.window.webContents.isDestroyed()) entry.window.webContents.send(channels.graph, this.graphStore.snapshot(entry.cura.id, this.activePage(entry)?.page.id ?? null)) }
+  private updateGraph(entry: CuraWindow, page: Page, fromPageId: string | null, kind: NavigationKind): void { this.graphStore.addNode(entry.cura.id, { id: page.id, url: page.url, title: page.title, lastVisit: page.lastVisit }); if (fromPageId) this.graphStore.addEdge(entry.cura.id, { from: fromPageId, to: page.id, kind, count: 1, lastAt: page.lastVisit }) }
+
   private reportNavigationError(entry: CuraWindow, message: string): void {
     if (!entry.window.webContents.isDestroyed()) {
       entry.window.webContents.send(channels.navigationError, message)
@@ -367,9 +394,9 @@ export class CuraWindowFactory implements CuraController {
     if (!active) return
     const bounds = entry.window.getContentBounds()
     active.view.setBounds({
-      x: 0,
+      x: entry.graphPaneCollapsed ? 0 : GRAPH_PANE_WIDTH,
       y: TOOLBAR_HEIGHT,
-      width: bounds.width,
+      width: Math.max(0, bounds.width - (entry.graphPaneCollapsed ? 0 : GRAPH_PANE_WIDTH)),
       height: Math.max(0, bounds.height - TOOLBAR_HEIGHT)
     })
   }

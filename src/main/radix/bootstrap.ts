@@ -9,6 +9,10 @@ import { registerActionHandler } from '../ipc/handlers/register-action-handler.j
 import { registerNavigateHandler } from '../ipc/handlers/register-navigate-handler.js'
 import { registerReadyHandler } from '../ipc/handlers/register-ready-handler.js'
 import { registerSelectPageHandler } from '../ipc/handlers/register-select-page-handler.js'
+import { registerSearchHandler } from '../ipc/handlers/register-search-handler.js'
+import { registerGraphPaneHandler } from '../ipc/handlers/register-graph-pane-handler.js'
+import { registerPageContentHandler } from '../ipc/handlers/register-page-content-handler.js'
+import { GraphStore } from '../nexus/graph-store.js'
 import { openDatabase } from '../tabularium/db.js'
 import { CuraRepository } from '../tabularium/repositories/cura-repo.js'
 import { PageRepository } from '../tabularium/repositories/page-repo.js'
@@ -34,6 +38,7 @@ export async function bootstrap(): Promise<void> {
 
   const db = openDatabase()
   const pageRepository = new PageRepository(db)
+  const graphStore = new GraphStore()
   const service = new CuraService(new CuraRepository(db))
   let factory: CuraWindowFactory
   const run = (id: ActionId, window: BrowserWindow): void => {
@@ -50,14 +55,17 @@ export async function bootstrap(): Promise<void> {
     onWebContentsCreated: (window, webContents) => {
       registerLocalShortcuts(webContents, (id) => run(id, window))
     }
-  })
+  }, graphStore)
 
   const resolveWindow = (senderId: number): BrowserWindow | undefined => factory.resolveUiWindow(senderId)
   const disposeIpc = [
     registerActionHandler(resolveWindow, run),
     registerNavigateHandler(resolveWindow, (window, url) => factory.navigate(window, url)),
     registerSelectPageHandler(resolveWindow, (window, pageId) => factory.selectPage(window, pageId)),
-    registerReadyHandler(resolveWindow, (window) => factory.publishState(window))
+    registerReadyHandler(resolveWindow, (window) => factory.publishState(window)),
+    registerSearchHandler(resolveWindow, (window, query) => factory.search(window, query)),
+    registerGraphPaneHandler(resolveWindow, (window, collapsed, layout) => factory.setGraphPane(window, collapsed, layout)),
+    registerPageContentHandler((senderId, content) => factory.savePageContent(senderId, content))
   ]
   app.once('will-quit', () => {
     unregisterGlobalShortcuts()

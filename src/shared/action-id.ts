@@ -9,3 +9,5 @@ export type ActionId =
   | 'fenestra.alwaysOnTop.toggle'
   | 'fenestra.minimizeOthers'
   | 'fenestra.opacity.cycle'
+  | 'indagatio.open'
+  | 'nexus.layout.toggle'

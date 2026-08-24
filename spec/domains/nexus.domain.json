@@ -1,0 +1,1 @@
+{"name":"nexus","description":"Cura 内ページ遷移グラフの正規化、投影、追跡。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/nexus/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)src/renderer/GraphPane/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)test/(graph-store|url-normalizer|navigation-tracker)\\.test\\.ts$"}]}
