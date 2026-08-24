@@ -9,12 +9,13 @@ interface Props {
   hits: string[]
   layout: GraphLayout
   collapsed: boolean
+  top: number
   onSelect(id: string): void
   onToggle(): void
 }
 
 /** @implements SPEC-ORBIS-P1-GRAPHPANE */
-export function GraphPane({ state, hits, layout, collapsed, onSelect, onToggle }: Props): ReactElement {
+export function GraphPane({ state, hits, layout, collapsed, top, onSelect, onToggle }: Props): ReactElement {
   const graphElement = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -55,7 +56,7 @@ export function GraphPane({ state, hits, layout, collapsed, onSelect, onToggle }
   }, [collapsed, hits, layout, onSelect, state])
 
   return (
-    <aside className={`${styles.pane} ${collapsed ? styles.collapsed : ''}`}>
+    <aside className={`${styles.pane} ${collapsed ? styles.collapsed : ''}`} style={{ top }}>
       <button onClick={onToggle}>{collapsed ? '›' : '‹'}</button>
       {!collapsed && <div ref={graphElement} className={styles.graph} aria-label="Interest graph" />}
     </aside>

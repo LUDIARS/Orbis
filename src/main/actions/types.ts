@@ -1,5 +1,6 @@
 import type { BrowserWindow } from 'electron'
 import type { ActionId } from '../../shared/action-id.js'
+import type { HabitusId } from '../habitus/types.js'
 
 export type { ActionId } from '../../shared/action-id.js'
 
@@ -16,6 +17,8 @@ export interface CuraController {
   minimizeOthers(): void
   focusSearch(window: BrowserWindow): void
   toggleGraphLayout(window: BrowserWindow): void
+  setHabitus(window: BrowserWindow, id: HabitusId): void
+  toggleComparatio(window: BrowserWindow): void
 }
 
 export interface ActionContext {

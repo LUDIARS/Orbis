@@ -1,0 +1,1 @@
+{"name":"comparatio","description":"Cura 内の商品事実を永続化して比較表へ投影する。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/comparatio/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)src/renderer/Comparatio/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)test/comparatio-service\\.test\\.ts$"}]}

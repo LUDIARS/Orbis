@@ -1,0 +1,1 @@
+{"name":"habitus","description":"Cura とページ単位の用途別プロファイル、partition、UA とデバイスエミュレーション。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/habitus/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)src/renderer/HabitusSwitcher/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)test/habitus-service\\.test\\.ts$"}]}

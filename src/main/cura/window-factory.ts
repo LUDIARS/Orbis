@@ -6,17 +6,22 @@ import { applyAlwaysOnTop, applyOpacity, minimizeNonPinned } from '../fenestra/a
 import { channels } from '../ipc/channels.js'
 import type { Cura } from '../tabularium/repositories/cura-repo.js'
 import type { NavigationKind, Page, PageRepository } from '../tabularium/repositories/page-repo.js'
-import type { GraphLayout } from '../../shared/ipc-contract.js'
+import { curaLayout, type GraphLayout } from '../../shared/ipc-contract.js'
 import { GraphStore } from '../nexus/graph-store.js'
 import { navigationKindForNewView, resolveNavigationParent } from '../nexus/navigation-tracker.js'
 import { normalizeGraphUrl } from '../nexus/url-normalizer.js'
+import { HabitusService } from '../habitus/service.js'
+import type { HabitusId } from '../habitus/types.js'
+import { applyEmulation } from '../habitus/emulation.js'
+import { ComparatioService } from '../comparatio/service.js'
+import { FormaRegistry } from '../forma/registry.js'
+import { injectForma } from '../forma/injector.js'
 import {
   isAllowedNavigationUrl,
   normalizeDevelopmentRendererUrl,
   normalizeNavigationUrl
 } from './navigation-url.js'
 
-const TOOLBAR_HEIGHT = 88
 const GRAPH_PANE_WIDTH = 300
 const DEFAULT_URL = 'https://example.com'
 
@@ -26,6 +31,7 @@ interface CuraPage {
   hasCommittedNavigation: boolean
   initialFromPageId: string | null
   initialNavigationKind: NavigationKind
+  habitusId: HabitusId
 }
 
 /** Cura 1 つ = BrowserWindow 1 つ。各アクティブ page は固有の WebContentsView を持つ。 */
@@ -35,6 +41,7 @@ interface CuraWindow {
   pages: CuraPage[]
   activeViewId: number | null
   graphPaneCollapsed: boolean
+  comparatioOpen: boolean
 }
 
 export interface CuraWindowFactoryHooks {
@@ -50,7 +57,10 @@ export class CuraWindowFactory implements CuraController {
   constructor(
     private readonly pageRepository: PageRepository,
     private readonly hooks: CuraWindowFactoryHooks,
-    private readonly graphStore: GraphStore
+    private readonly graphStore: GraphStore,
+    private readonly habitusService: HabitusService,
+    private readonly comparatioService: ComparatioService,
+    private readonly formaRegistry: FormaRegistry
   ) {}
 
   create(cura: Cura, restore: Page[] = []): BrowserWindow {
@@ -70,7 +80,7 @@ export class CuraWindowFactory implements CuraController {
         sandbox: true
       }
     })
-    const entry: CuraWindow = { cura, window, pages: [], activeViewId: null, graphPaneCollapsed: false }
+    const entry: CuraWindow = { cura, window, pages: [], activeViewId: null, graphPaneCollapsed: false, comparatioOpen: cura.habitusId === 'shopping' }
     this.graphStore.restore(cura.id, this.pageRepository.graphByCura(cura.id))
     this.windows.set(window.id, entry)
     this.hooks.onWebContentsCreated(window, window.webContents)
@@ -125,6 +135,8 @@ export class CuraWindowFactory implements CuraController {
     if (!entry) return
     this.sendPages(entry)
     window.webContents.send(channels.fenestraState, this.fenestraState(entry))
+    this.sendHabitus(entry)
+    this.sendComparatio(entry)
   }
 
   navigate(window: BrowserWindow, value: string): void {
@@ -158,6 +170,51 @@ export class CuraWindowFactory implements CuraController {
   focusSearch(window: BrowserWindow): void { window.webContents.send(channels.focusSearch) }
   toggleGraphLayout(window: BrowserWindow): void { window.webContents.send(channels.toggleGraphLayout) }
   savePageContent(senderId: number, content: string): void { for (const entry of this.windows.values()) { const tab = entry.pages.find((item) => item.view.webContents.id === senderId); if (tab) { this.pageRepository.saveContent(tab.page, content); return } } }
+
+  saveProductFacts(senderId: number, facts: import('../forma/sites/amazon/facts-extractor.js').ProductFacts): void {
+    for (const entry of this.windows.values()) {
+      const tab = entry.pages.find((item) => item.view.webContents.id === senderId)
+      if (!tab || tab.habitusId !== 'shopping') continue
+      const currentUrl = tab.view.webContents.getURL()
+      const isAmazonForma = this.formaRegistry.matching(currentUrl, tab.habitusId)
+        .some((forma) => forma.id === 'amazon')
+      if (!isAmazonForma || facts.url !== currentUrl) return
+      this.comparatioService.upsert(entry.cura.id, facts)
+      this.sendComparatio(entry)
+      return
+    }
+  }
+
+  setHabitus(window: BrowserWindow, habitusId: HabitusId): void {
+    const entry = this.entryOf(window)
+    if (!entry || this.habitusService.getCuraDefault(entry.cura) === habitusId) return
+    entry.cura = this.habitusService.setCuraDefault(entry.cura, habitusId)
+    this.hooks.onCuraChanged(entry.cura)
+    entry.comparatioOpen = habitusId === 'shopping'
+    for (const tab of [...entry.pages]) {
+      const resolvedHabitusId = this.habitusService.resolve(entry.cura, tab.page.id)
+      if (tab.habitusId === resolvedHabitusId) continue
+      const previous = this.habitusService.preset(tab.habitusId)
+      const next = this.habitusService.preset(resolvedHabitusId)
+      if (previous.partition === next.partition) {
+        tab.habitusId = resolvedHabitusId
+        this.applyPageHabitus(tab, next)
+        continue
+      }
+      this.recreatePageForPartition(entry, tab, resolvedHabitusId)
+    }
+    this.layoutView(entry)
+    this.sendHabitus(entry)
+    this.sendComparatio(entry)
+  }
+
+  toggleComparatio(window: BrowserWindow): void {
+    const entry = this.entryOf(window)
+    if (!entry) return
+    entry.comparatioOpen = !entry.comparatioOpen
+    this.layoutView(entry)
+    this.sendComparatio(entry)
+  }
 
   goBack(window: BrowserWindow): void {
     const entry = this.entryOf(window)
@@ -243,7 +300,8 @@ export class CuraWindowFactory implements CuraController {
     fromPageId: string | null = null,
     navigationKind: NavigationKind = 'navigate',
     restoredPage?: Page,
-    activate = true
+    activate = true,
+    forcedHabitusId?: HabitusId
   ): void {
     let url: string
     try {
@@ -253,9 +311,13 @@ export class CuraWindowFactory implements CuraController {
       return
     }
 
+    const habitusId = forcedHabitusId
+      ?? this.habitusService.resolve(entry.cura, restoredPage?.id ?? randomUUID())
+    const preset = this.habitusService.preset(habitusId)
     const view = new WebContentsView({
       webPreferences: {
         preload: join(__dirname, '../preload/page-bridge.js'),
+        partition: preset.partition,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true
@@ -282,9 +344,12 @@ export class CuraWindowFactory implements CuraController {
       view,
       hasCommittedNavigation: false,
       initialFromPageId: fromPageId,
-      initialNavigationKind: navigationKind
+      initialNavigationKind: navigationKind,
+      habitusId
     }
     entry.pages.push(tab)
+    if (preset.userAgent) view.webContents.setUserAgent(preset.userAgent)
+    void applyEmulation(view.webContents, preset).catch((error: unknown) => console.error('Unable to apply initial Habitus emulation.', error))
     this.hooks.onWebContentsCreated(entry.window, view.webContents)
 
     view.webContents.on('will-navigate', (details) => this.guardNavigation(entry, details, details.url))
@@ -302,6 +367,9 @@ export class CuraWindowFactory implements CuraController {
       this.updateGraph(entry, updatedPage, null, 'navigate')
       this.sendPages(entry)
       this.sendGraph(entry)
+    })
+    view.webContents.on('did-finish-load', () => {
+      void injectForma(view.webContents, this.formaRegistry, tab.habitusId).catch((error: unknown) => console.error('Unable to apply Forma.', error))
     })
 
     if (activate) this.activatePage(entry, tab)
@@ -390,6 +458,36 @@ export class CuraWindowFactory implements CuraController {
     entry.window.webContents.send(channels.graph, this.graphStore.snapshot(entry.cura.id, this.activePage(entry)?.page.id ?? null))
   }
 
+  private sendHabitus(entry: CuraWindow): void {
+    if (!entry.window.webContents.isDestroyed()) entry.window.webContents.send(channels.habitusState, { id: this.habitusService.getCuraDefault(entry.cura) })
+  }
+
+  private sendComparatio(entry: CuraWindow): void {
+    if (!entry.window.webContents.isDestroyed()) entry.window.webContents.send(channels.comparatio, { open: entry.comparatioOpen, products: this.comparatioService.list(entry.cura.id) })
+  }
+
+  private recreatePageForPartition(entry: CuraWindow, tab: CuraPage, habitusId: HabitusId): void {
+    const wasActive = this.activePage(entry) === tab
+    entry.window.contentView.removeChildView(tab.view)
+    if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
+    entry.pages = entry.pages.filter((candidate) => candidate !== tab)
+    this.createPage(
+      entry,
+      tab.page.url,
+      tab.initialFromPageId,
+      tab.initialNavigationKind,
+      tab.page,
+      wasActive,
+      habitusId
+    )
+  }
+
+  private applyPageHabitus(tab: CuraPage, preset: ReturnType<HabitusService['preset']>): void {
+    if (preset.userAgent) tab.view.webContents.setUserAgent(preset.userAgent)
+    else tab.view.webContents.setUserAgent('')
+    void applyEmulation(tab.view.webContents, preset).then(() => tab.view.webContents.reload()).catch((error: unknown) => console.error('Unable to apply Habitus emulation.', error))
+  }
+
   private updateGraph(entry: CuraWindow, page: Page, fromPageId: string | null, kind: NavigationKind): void {
     this.graphStore.addNode(entry.cura.id, { id: page.id, url: page.url, title: page.title, lastVisit: page.lastVisit })
     if (!fromPageId) return
@@ -412,11 +510,15 @@ export class CuraWindowFactory implements CuraController {
     const active = this.activePage(entry)
     if (!active) return
     const bounds = entry.window.getContentBounds()
+    const comparatioHeight = entry.comparatioOpen
+      ? curaLayout.comparatioPanelHeight
+      : curaLayout.comparatioToggleHeight
+    const contentTop = curaLayout.toolbarHeight + comparatioHeight
     active.view.setBounds({
       x: entry.graphPaneCollapsed ? 0 : GRAPH_PANE_WIDTH,
-      y: TOOLBAR_HEIGHT,
+      y: contentTop,
       width: Math.max(0, bounds.width - (entry.graphPaneCollapsed ? 0 : GRAPH_PANE_WIDTH)),
-      height: Math.max(0, bounds.height - TOOLBAR_HEIGHT)
+      height: Math.max(0, bounds.height - contentTop)
     })
   }
 }

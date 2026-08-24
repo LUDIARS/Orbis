@@ -12,6 +12,8 @@ const rendererEvents = new Set<RendererEventName>([
   channels.fenestraState
   , channels.graph
   , channels.searchResult
+  , channels.habitusState
+  , channels.comparatio
 ])
 
 /** @implements SPEC-ORBIS-P0-IPC */
@@ -22,6 +24,8 @@ const bridge: OrbisBridge = {
   search: (query) => ipcRenderer.send(channels.search, query),
   setGraphLayout: (layout) => ipcRenderer.send(channels.graphLayout, layout),
   setGraphPaneCollapsed: (collapsed) => ipcRenderer.send(channels.graphPane, collapsed),
+  setHabitus: (id) => ipcRenderer.send(channels.action, `habitus.set:${id}`),
+  toggleComparatio: () => ipcRenderer.send(channels.comparatioToggle),
   ready: () => ipcRenderer.send(channels.ready),
   on: <K extends RendererEventName>(channel: K, listener: (value: RendererEventMap[K]) => void): (() => void) => {
     if (!rendererEvents.has(channel)) throw new TypeError(`Unsupported renderer event: ${channel}`)

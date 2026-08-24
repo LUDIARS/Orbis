@@ -16,6 +16,14 @@ import { GraphStore } from '../nexus/graph-store.js'
 import { openDatabase } from '../tabularium/db.js'
 import { CuraRepository } from '../tabularium/repositories/cura-repo.js'
 import { PageRepository } from '../tabularium/repositories/page-repo.js'
+import { HabitusService } from '../habitus/service.js'
+import { ComparatioService } from '../comparatio/service.js'
+import { FormaRegistry } from '../forma/registry.js'
+import { amazonForma } from '../forma/sites/amazon/index.js'
+import { registerProductFactsHandler } from '../ipc/handlers/register-product-facts-handler.js'
+import { registerComparatioHandler } from '../ipc/handlers/register-comparatio-handler.js'
+import { habitusPresets } from '../habitus/presets/index.js'
+import { denySessionPermissions } from '../habitus/session-permissions.js'
 
 /** @implements SPEC-ORBIS-P0-RADIX */
 export async function bootstrap(): Promise<void> {
@@ -33,11 +41,16 @@ export async function bootstrap(): Promise<void> {
   })
   await app.whenReady()
 
-  session.defaultSession.setPermissionCheckHandler(() => false)
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
+  const restrictedSessions = new Set([
+    session.defaultSession,
+    ...Object.values(habitusPresets).map((preset) => session.fromPartition(preset.partition))
+  ])
+  const disposeSessionPermissions = [...restrictedSessions].map(denySessionPermissions)
 
   const db = openDatabase()
   const pageRepository = new PageRepository(db)
+  const habitusService = new HabitusService(db)
+  const comparatioService = new ComparatioService(db)
   const graphStore = new GraphStore()
   const service = new CuraService(new CuraRepository(db))
   let factory: CuraWindowFactory
@@ -55,7 +68,7 @@ export async function bootstrap(): Promise<void> {
     onWebContentsCreated: (window, webContents) => {
       registerLocalShortcuts(webContents, (id) => run(id, window))
     }
-  }, graphStore)
+  }, graphStore, habitusService, comparatioService, new FormaRegistry([amazonForma]))
 
   const resolveWindow = (senderId: number): BrowserWindow | undefined => factory.resolveUiWindow(senderId)
   const disposeIpc = [
@@ -65,13 +78,14 @@ export async function bootstrap(): Promise<void> {
     registerReadyHandler(resolveWindow, (window) => factory.publishState(window)),
     registerSearchHandler(resolveWindow, (window, query) => factory.search(window, query)),
     registerGraphPaneHandler(resolveWindow, (window, collapsed, layout) => factory.setGraphPane(window, collapsed, layout)),
-    registerPageContentHandler((senderId, content) => factory.savePageContent(senderId, content))
+    registerPageContentHandler((senderId, content) => factory.savePageContent(senderId, content)),
+    registerProductFactsHandler((senderId, facts) => factory.saveProductFacts(senderId, facts)),
+    registerComparatioHandler((senderId) => { const window = resolveWindow(senderId); if (window) factory.toggleComparatio(window) })
   ]
   app.once('will-quit', () => {
     unregisterGlobalShortcuts()
     for (const dispose of disposeIpc) dispose()
-    session.defaultSession.setPermissionCheckHandler(null)
-    session.defaultSession.setPermissionRequestHandler(null)
+    for (const dispose of disposeSessionPermissions) dispose()
     db.close()
   })
 

@@ -1,4 +1,5 @@
 import { ipcRenderer } from 'electron'
+import './forma-host.js'
 
 /** @implements SPEC-ORBIS-P1-INDAGATIO */
 export function reportPageText(): void {

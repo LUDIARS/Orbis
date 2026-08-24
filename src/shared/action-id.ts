@@ -11,3 +11,7 @@ export type ActionId =
   | 'fenestra.opacity.cycle'
   | 'indagatio.open'
   | 'nexus.layout.toggle'
+  | 'habitus.set:desktop'
+  | 'habitus.set:mobile'
+  | 'habitus.set:shopping'
+  | 'comparatio.toggle'

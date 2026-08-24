@@ -9,6 +9,10 @@ import { pageNew } from './page-new.js'
 import { pageReload } from './page-reload.js'
 import { indagatioOpen } from './indagatio-open.js'
 import { nexusLayoutToggle } from './nexus-layout-toggle.js'
+import { habitusSetDesktop } from './habitus-set-desktop.js'
+import { habitusSetMobile } from './habitus-set-mobile.js'
+import { habitusSetShopping } from './habitus-set-shopping.js'
+import { comparatioToggle } from './comparatio-toggle.js'
 import type { Action, ActionContext, ActionId } from './types.js'
 
 const actions: Record<ActionId, Action> = {
@@ -22,7 +26,11 @@ const actions: Record<ActionId, Action> = {
   'fenestra.minimizeOthers': fenestraMinimizeOthers,
   'fenestra.opacity.cycle': fenestraOpacityCycle,
   'indagatio.open': indagatioOpen,
-  'nexus.layout.toggle': nexusLayoutToggle
+  'nexus.layout.toggle': nexusLayoutToggle,
+  'habitus.set:desktop': habitusSetDesktop,
+  'habitus.set:mobile': habitusSetMobile,
+  'habitus.set:shopping': habitusSetShopping,
+  'comparatio.toggle': comparatioToggle
 }
 
 /** @implements SPEC-ORBIS-P0-ACTIONS */

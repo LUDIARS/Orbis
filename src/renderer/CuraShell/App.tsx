@@ -1,9 +1,11 @@
 import { useEffect, useState, type ReactElement } from 'react'
-import { channels, type FenestraViewState, type GraphLayout, type GraphViewState, type PageViewState } from '../../shared/ipc-contract'
+import { channels, curaLayout, type ComparatioViewState, type FenestraViewState, type GraphLayout, type GraphViewState, type HabitusId, type PageViewState } from '../../shared/ipc-contract'
 import { AddressBar } from '../AddressBar/AddressBar'
 import { PageTabs } from '../PageTabs/PageTabs'
 import { GraphPane } from '../GraphPane/GraphPane'
 import { SearchBox } from '../Indagatio/SearchBox'
+import { HabitusSwitcher } from '../HabitusSwitcher/HabitusSwitcher'
+import { ComparatioPanel } from '../Comparatio/ComparatioPanel'
 import styles from './App.module.css'
 
 /** @implements SPEC-ORBIS-P0-RENDERER */
@@ -17,7 +19,12 @@ export function App(): ReactElement {
   const [layout, setLayout] = useState<GraphLayout>('force')
   const [collapsed, setCollapsed] = useState(false)
   const [focusToken, setFocusToken] = useState(0)
+  const [habitus, setHabitus] = useState<HabitusId>('desktop')
+  const [comparatio, setComparatio] = useState<ComparatioViewState>({ open: false, products: [] })
   const current = pages.find((page) => page.id === activePageId)
+  const contentTop = curaLayout.toolbarHeight + (comparatio.open
+    ? curaLayout.comparatioPanelHeight
+    : curaLayout.comparatioToggleHeight)
 
   useEffect(() => {
     const disposePages = window.orbis.on(channels.pages, (state) => {
@@ -33,6 +40,8 @@ export function App(): ReactElement {
     const disposeToggle = window.orbis.on(channels.toggleGraphLayout, () => {
       setLayout((value) => value === 'force' ? 'timeline' : 'force')
     })
+    const disposeHabitus = window.orbis.on(channels.habitusState, (state) => setHabitus(state.id))
+    const disposeComparatio = window.orbis.on(channels.comparatio, setComparatio)
     window.orbis.ready()
     return () => {
       disposePages()
@@ -42,6 +51,8 @@ export function App(): ReactElement {
       disposeSearch()
       disposeFocus()
       disposeToggle()
+      disposeHabitus()
+      disposeComparatio()
     }
   }, [])
 
@@ -55,15 +66,18 @@ export function App(): ReactElement {
           onSearch={(query) => window.orbis.search(query)}
           onSelectFirst={() => { if (hits[0]) window.orbis.selectPage(hits[0]) }}
         />
+        <HabitusSwitcher value={habitus} onChange={(id) => { setHabitus(id); window.orbis.setHabitus(id) }} />
         <button onClick={() => { const next = layout === 'force' ? 'timeline' : 'force'; setLayout(next); window.orbis.setGraphLayout(next) }}>
           Layout
         </button>
       </section>
+      <ComparatioPanel className={styles.comparatio} state={comparatio} onToggle={() => window.orbis.toggleComparatio()} />
       <GraphPane
         state={graph}
         hits={hits}
         layout={layout}
         collapsed={collapsed}
+        top={contentTop}
         onSelect={(id) => window.orbis.selectPage(id)}
         onToggle={() => { const next = !collapsed; setCollapsed(next); window.orbis.setGraphPaneCollapsed(next) }}
       />

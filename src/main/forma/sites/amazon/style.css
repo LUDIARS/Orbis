@@ -1,0 +1,3 @@
+[data-component-type="sp-sponsored-result"], .AdHolder, .s-sponsored-label-info-icon { opacity: .22 !important; filter: grayscale(1) !important; }
+#orbis-product-facts { display:flex; gap:.55rem; align-items:center; flex-wrap:wrap; margin:.6rem 0; padding:.55rem; border:1px solid #d5d9d9; border-radius:8px; font:14px Arial,sans-serif; }
+#orbis-product-facts button { background:#ffd814; border:1px solid #fcd200; border-radius:8px; padding:.45rem .8rem; cursor:pointer; }

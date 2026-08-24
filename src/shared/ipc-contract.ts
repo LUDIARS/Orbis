@@ -13,9 +13,13 @@ export const channels = {
   search: 'orbis:search',
   searchResult: 'orbis:search-result',
   graphLayout: 'orbis:graph-layout',
-  graphPane: 'orbis:graph-pane'
-  , focusSearch: 'orbis:focus-search'
-  , toggleGraphLayout: 'orbis:toggle-graph-layout'
+  graphPane: 'orbis:graph-pane',
+  focusSearch: 'orbis:focus-search',
+  toggleGraphLayout: 'orbis:toggle-graph-layout',
+  habitusState: 'orbis:habitus-state',
+  productFacts: 'orbis:product-facts',
+  comparatio: 'orbis:comparatio',
+  comparatioToggle: 'orbis:comparatio-toggle'
 } as const
 
 export interface PageViewState {
@@ -38,6 +42,16 @@ export interface GraphEdgeView { from: string; to: string; kind: 'navigate' | 'n
 export interface GraphViewState { nodes: GraphNodeView[]; edges: GraphEdgeView[]; activePageId: string | null }
 export interface SearchResult { pageIds: string[] }
 export type GraphLayout = 'force' | 'timeline'
+/** @implements SPEC-ORBIS-P2-COMPARATIO */
+export const curaLayout = {
+  toolbarHeight: 88,
+  comparatioToggleHeight: 42,
+  comparatioPanelHeight: 180
+} as const
+export type HabitusId = 'desktop' | 'mobile' | 'shopping'
+export interface HabitusViewState { id: HabitusId }
+export interface ProductFactsView { id: string; title: string; price: string | null; rating: string | null; reviewCount: string | null; delivery: string | null; url: string }
+export interface ComparatioViewState { open: boolean; products: ProductFactsView[] }
 
 export interface RendererEventMap {
   [channels.pages]: PagesViewState
@@ -47,6 +61,8 @@ export interface RendererEventMap {
   [channels.searchResult]: SearchResult
   [channels.focusSearch]: undefined
   [channels.toggleGraphLayout]: undefined
+  [channels.habitusState]: HabitusViewState
+  [channels.comparatio]: ComparatioViewState
 }
 
 export type RendererEventName = keyof RendererEventMap
@@ -58,6 +74,8 @@ export interface OrbisBridge {
   search(query: string): void
   setGraphLayout(layout: GraphLayout): void
   setGraphPaneCollapsed(collapsed: boolean): void
+  setHabitus(id: HabitusId): void
+  toggleComparatio(): void
   ready(): void
   on<K extends RendererEventName>(channel: K, listener: (value: RendererEventMap[K]) => void): () => void
 }
