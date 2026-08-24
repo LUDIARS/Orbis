@@ -22,5 +22,17 @@ memory_links:
 
 - `SPEC-ORBIS-P1-NEXUS`: URL 正規化、遷移追跡、Cura 単位グラフ投影を担う。
 - `SPEC-ORBIS-P1-INDAGATIO`: page_fts の同期と検索を担う。
-- `SPEC-ORBIS-P1-GRAPHPANE`: グラフ描画・強調・レイアウト切替・選択を担う。
+- `SPEC-ORBIS-P1-GRAPHPANE`: Cytoscape.js によるグラフ描画、検索・アクティブ強調、cose/時系列 preset レイアウト切替、選択を担う。
 - `SPEC-ORBIS-P1-IPC`: 検索、グラフ状態、表示設定の型付き IPC 境界を担う。
+
+## P1.1 仕上げ
+
+### 目的
+
+P1 のグラフ描画を Cytoscape.js へ置換し、ポップアップ遷移と URL 正規化を Nexus の記録モデルへ完全に接続する。
+
+### 完了条件
+
+- GraphPane は Cytoscape.js で cose と lastVisit 順 preset の時系列レイアウトを描画する。
+- `window.open` / `target=_blank` は新しい WebContentsView を同じ Cura に作り、`newview` edge として永続化・投影される。
+- URL 正規化は Nexus の単一実装を Migratio が利用し、追跡パラメータ集合は両者の和集合である。

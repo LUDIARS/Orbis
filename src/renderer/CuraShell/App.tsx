@@ -30,20 +30,43 @@ export function App(): ReactElement {
     const disposeGraph = window.orbis.on(channels.graph, setGraph)
     const disposeSearch = window.orbis.on(channels.searchResult, (result) => setHits(result.pageIds))
     const disposeFocus = window.orbis.on(channels.focusSearch, () => setFocusToken((value) => value + 1))
-    const disposeToggle = window.orbis.on(channels.toggleGraphLayout, () => setLayout((value) => value === 'force' ? 'timeline' : 'force'))
+    const disposeToggle = window.orbis.on(channels.toggleGraphLayout, () => {
+      setLayout((value) => value === 'force' ? 'timeline' : 'force')
+    })
     window.orbis.ready()
     return () => {
       disposePages()
       disposeError()
       disposeFenestra()
-      disposeGraph(); disposeSearch(); disposeFocus(); disposeToggle()
+      disposeGraph()
+      disposeSearch()
+      disposeFocus()
+      disposeToggle()
     }
   }, [])
 
   return (
     <main className={styles.shell}>
-      <section className={styles.toolbar}><PageTabs pages={pages} activePageId={activePageId} /><AddressBar url={current?.url ?? ''} /><SearchBox focusToken={focusToken} onSearch={(query) => window.orbis.search(query)} onSelectFirst={() => { if (hits[0]) window.orbis.selectPage(hits[0]) }} /><button onClick={() => { const next = layout === 'force' ? 'timeline' : 'force'; setLayout(next); window.orbis.setGraphLayout(next) }}>Layout</button></section>
-      <GraphPane state={graph} hits={hits} layout={layout} collapsed={collapsed} onSelect={(id) => window.orbis.selectPage(id)} onToggle={() => { const next = !collapsed; setCollapsed(next); window.orbis.setGraphPaneCollapsed(next) }} />
+      <section className={styles.toolbar}>
+        <PageTabs pages={pages} activePageId={activePageId} />
+        <AddressBar url={current?.url ?? ''} />
+        <SearchBox
+          focusToken={focusToken}
+          onSearch={(query) => window.orbis.search(query)}
+          onSelectFirst={() => { if (hits[0]) window.orbis.selectPage(hits[0]) }}
+        />
+        <button onClick={() => { const next = layout === 'force' ? 'timeline' : 'force'; setLayout(next); window.orbis.setGraphLayout(next) }}>
+          Layout
+        </button>
+      </section>
+      <GraphPane
+        state={graph}
+        hits={hits}
+        layout={layout}
+        collapsed={collapsed}
+        onSelect={(id) => window.orbis.selectPage(id)}
+        onToggle={() => { const next = !collapsed; setCollapsed(next); window.orbis.setGraphPaneCollapsed(next) }}
+      />
       <span className={styles.status} role={navigationError ? 'alert' : undefined}>
         {navigationError ?? `${fenestra.alwaysOnTop ? '📌 top ' : ''}${Math.round(fenestra.opacity * 100)}%`}
       </span>

@@ -13,11 +13,13 @@
     "package:dir": "npm run build && electron-builder --dir"
   },
   "dependencies": {
+    "cytoscape": "^3.34.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@types/cytoscape": "^3.21.9",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
@@ -29,5 +31,10 @@
     "vite": "^7.3.1",
     "vitest": "^4.0.16"
   },
-  "build": { "appId": "org.ludiars.orbis", "files": ["out/**/*"] }
+  "build": {
+    "appId": "org.ludiars.orbis",
+    "files": [
+      "out/**/*"
+    ]
+  }
 }

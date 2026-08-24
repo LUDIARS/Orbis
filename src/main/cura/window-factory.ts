@@ -8,7 +8,7 @@ import type { Cura } from '../tabularium/repositories/cura-repo.js'
 import type { NavigationKind, Page, PageRepository } from '../tabularium/repositories/page-repo.js'
 import type { GraphLayout } from '../../shared/ipc-contract.js'
 import { GraphStore } from '../nexus/graph-store.js'
-import { resolveNavigationParent } from '../nexus/navigation-tracker.js'
+import { navigationKindForNewView, resolveNavigationParent } from '../nexus/navigation-tracker.js'
 import { normalizeGraphUrl } from '../nexus/url-normalizer.js'
 import {
   isAllowedNavigationUrl,
@@ -178,7 +178,7 @@ export class CuraWindowFactory implements CuraController {
 
   newPage(window: BrowserWindow): void {
     const entry = this.entryOf(window)
-    if (entry) this.createPage(entry, DEFAULT_URL, this.activePage(entry)?.page.id ?? null, 'newview')
+    if (entry) this.createPage(entry, DEFAULT_URL, this.activePage(entry)?.page.id ?? null, navigationKindForNewView())
   }
 
   closePage(window: BrowserWindow): void {
@@ -254,7 +254,12 @@ export class CuraWindowFactory implements CuraController {
     }
 
     const view = new WebContentsView({
-      webPreferences: { preload: join(__dirname, '../preload/page-bridge.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
+      webPreferences: {
+        preload: join(__dirname, '../preload/page-bridge.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true
+      }
     })
     const now = new Date().toISOString()
     const normalizedUrl = normalizeGraphUrl(url)
@@ -285,7 +290,7 @@ export class CuraWindowFactory implements CuraController {
     view.webContents.on('will-navigate', (details) => this.guardNavigation(entry, details, details.url))
     view.webContents.on('will-redirect', (details) => this.guardNavigation(entry, details, details.url))
     view.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
-      this.createPage(entry, nextUrl, tab.page.id, 'newview')
+      this.createPage(entry, nextUrl, tab.page.id, navigationKindForNewView())
       return { action: 'deny' }
     })
     view.webContents.on('did-navigate', (_event, nextUrl) => this.commitNavigation(entry, tab, nextUrl))
@@ -294,7 +299,9 @@ export class CuraWindowFactory implements CuraController {
       const updatedPage = { ...tab.page, title }
       this.pageRepository.save(updatedPage)
       tab.page = updatedPage
+      this.updateGraph(entry, updatedPage, null, 'navigate')
       this.sendPages(entry)
+      this.sendGraph(entry)
     })
 
     if (activate) this.activatePage(entry, tab)
@@ -326,6 +333,7 @@ export class CuraWindowFactory implements CuraController {
       this.updateGraph(entry, committedPage, tab.initialFromPageId, tab.initialNavigationKind)
       tab.hasCommittedNavigation = true
       this.sendPages(entry)
+      this.sendGraph(entry)
       return
     }
 
@@ -333,7 +341,9 @@ export class CuraWindowFactory implements CuraController {
       const reloadedPage = { ...tab.page, lastVisit: now }
       this.pageRepository.recordNavigation(entry.cura.id, null, reloadedPage)
       tab.page = reloadedPage
+      this.updateGraph(entry, reloadedPage, null, 'navigate')
       this.sendPages(entry)
+      this.sendGraph(entry)
       return
     }
 
@@ -364,6 +374,7 @@ export class CuraWindowFactory implements CuraController {
     this.layoutView(entry)
     page.view.webContents.focus()
     this.sendPages(entry)
+    this.sendGraph(entry)
   }
 
   private sendPages(entry: CuraWindow): void {
@@ -374,8 +385,16 @@ export class CuraWindowFactory implements CuraController {
     })
   }
 
-  private sendGraph(entry: CuraWindow): void { if (!entry.window.isDestroyed() && !entry.window.webContents.isDestroyed()) entry.window.webContents.send(channels.graph, this.graphStore.snapshot(entry.cura.id, this.activePage(entry)?.page.id ?? null)) }
-  private updateGraph(entry: CuraWindow, page: Page, fromPageId: string | null, kind: NavigationKind): void { this.graphStore.addNode(entry.cura.id, { id: page.id, url: page.url, title: page.title, lastVisit: page.lastVisit }); if (fromPageId) this.graphStore.addEdge(entry.cura.id, { from: fromPageId, to: page.id, kind, count: 1, lastAt: page.lastVisit }) }
+  private sendGraph(entry: CuraWindow): void {
+    if (entry.window.isDestroyed() || entry.window.webContents.isDestroyed()) return
+    entry.window.webContents.send(channels.graph, this.graphStore.snapshot(entry.cura.id, this.activePage(entry)?.page.id ?? null))
+  }
+
+  private updateGraph(entry: CuraWindow, page: Page, fromPageId: string | null, kind: NavigationKind): void {
+    this.graphStore.addNode(entry.cura.id, { id: page.id, url: page.url, title: page.title, lastVisit: page.lastVisit })
+    if (!fromPageId) return
+    this.graphStore.addEdge(entry.cura.id, { from: fromPageId, to: page.id, kind, count: 1, lastAt: page.lastVisit })
+  }
 
   private reportNavigationError(entry: CuraWindow, message: string): void {
     if (!entry.window.webContents.isDestroyed()) {
