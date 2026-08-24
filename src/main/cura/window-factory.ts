@@ -23,6 +23,7 @@ import {
 } from './navigation-url.js'
 
 const GRAPH_PANE_WIDTH = 300
+const SETTINGS_PANE_WIDTH = 420
 const DEFAULT_URL = 'https://example.com'
 
 interface CuraPage {
@@ -42,6 +43,7 @@ interface CuraWindow {
   activeViewId: number | null
   graphPaneCollapsed: boolean
   comparatioOpen: boolean
+  settingsPaneOpen: boolean
 }
 
 export interface CuraWindowFactoryHooks {
@@ -80,7 +82,7 @@ export class CuraWindowFactory implements CuraController {
         sandbox: true
       }
     })
-    const entry: CuraWindow = { cura, window, pages: [], activeViewId: null, graphPaneCollapsed: false, comparatioOpen: cura.habitusId === 'shopping' }
+    const entry: CuraWindow = { cura, window, pages: [], activeViewId: null, graphPaneCollapsed: false, comparatioOpen: cura.habitusId === 'shopping', settingsPaneOpen: false }
     this.graphStore.restore(cura.id, this.pageRepository.graphByCura(cura.id))
     this.windows.set(window.id, entry)
     this.hooks.onWebContentsCreated(window, window.webContents)
@@ -130,6 +132,11 @@ export class CuraWindowFactory implements CuraController {
     return [...this.windows.values()].find((entry) => entry.window.webContents.id === senderId)?.window
   }
 
+  /** @implements SPEC-ORBIS-P3-GESTUS */
+  resolveWindow(senderId: number): BrowserWindow | undefined {
+    return [...this.windows.values()].find((entry) => entry.window.webContents.id === senderId || entry.pages.some((page) => page.view.webContents.id === senderId))?.window
+  }
+
   publishState(window: BrowserWindow): void {
     const entry = this.entryOf(window)
     if (!entry) return
@@ -167,6 +174,8 @@ export class CuraWindowFactory implements CuraController {
 
   search(window: BrowserWindow, query: string): string[] { const entry = this.entryOf(window); return entry ? this.pageRepository.search(entry.cura.id, query) : [] }
   setGraphPane(window: BrowserWindow, collapsed: boolean, _layout?: GraphLayout): void { const entry = this.entryOf(window); if (!entry) return; entry.graphPaneCollapsed = collapsed; this.layoutView(entry) }
+  /** @implements SPEC-ORBIS-P3-SETTINGS */
+  setSettingsPaneOpen(window: BrowserWindow, open: boolean): void { const entry = this.entryOf(window); if (!entry) return; entry.settingsPaneOpen = open; this.layoutView(entry) }
   focusSearch(window: BrowserWindow): void { window.webContents.send(channels.focusSearch) }
   toggleGraphLayout(window: BrowserWindow): void { window.webContents.send(channels.toggleGraphLayout) }
   savePageContent(senderId: number, content: string): void { for (const entry of this.windows.values()) { const tab = entry.pages.find((item) => item.view.webContents.id === senderId); if (tab) { this.pageRepository.saveContent(tab.page, content); return } } }
@@ -206,6 +215,14 @@ export class CuraWindowFactory implements CuraController {
     this.layoutView(entry)
     this.sendHabitus(entry)
     this.sendComparatio(entry)
+  }
+
+  /** @implements SPEC-ORBIS-P3-CLAVIS */
+  cycleHabitus(window: BrowserWindow): void {
+    const entry = this.entryOf(window)
+    if (!entry) return
+    const next: Record<HabitusId, HabitusId> = { desktop: 'mobile', mobile: 'shopping', shopping: 'desktop' }
+    this.setHabitus(window, next[this.habitusService.getCuraDefault(entry.cura)])
   }
 
   toggleComparatio(window: BrowserWindow): void {
@@ -517,7 +534,7 @@ export class CuraWindowFactory implements CuraController {
     active.view.setBounds({
       x: entry.graphPaneCollapsed ? 0 : GRAPH_PANE_WIDTH,
       y: contentTop,
-      width: Math.max(0, bounds.width - (entry.graphPaneCollapsed ? 0 : GRAPH_PANE_WIDTH)),
+      width: Math.max(0, bounds.width - (entry.graphPaneCollapsed ? 0 : GRAPH_PANE_WIDTH) - (entry.settingsPaneOpen ? SETTINGS_PANE_WIDTH : 0)),
       height: Math.max(0, bounds.height - contentTop)
     })
   }

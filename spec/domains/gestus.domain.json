@@ -1,0 +1,1 @@
+{"name":"gestus","description":"右ボタンの軌跡を 8 方向ストロークへ認識し、アクションに解決する。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/gestus/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)src/renderer/GestureOverlay/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)test/gestus-.*\\.test\\.ts$"}]}

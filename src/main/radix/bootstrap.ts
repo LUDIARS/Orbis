@@ -24,8 +24,13 @@ import { registerProductFactsHandler } from '../ipc/handlers/register-product-fa
 import { registerComparatioHandler } from '../ipc/handlers/register-comparatio-handler.js'
 import { habitusPresets } from '../habitus/presets/index.js'
 import { denySessionPermissions } from '../habitus/session-permissions.js'
+import { BindingStore } from '../clavis/binding-store.js'
+import { GestusService } from '../gestus/service.js'
+import { registerGestureHandler } from '../ipc/handlers/register-gesture-handler.js'
+import { registerBindingHandler } from '../ipc/handlers/register-binding-handler.js'
+import { registerSettingsPaneHandler } from '../ipc/handlers/register-settings-pane-handler.js'
 
-/** @implements SPEC-ORBIS-P0-RADIX */
+/** @implements SPEC-ORBIS-P0-RADIX SPEC-ORBIS-P3-CLAVIS SPEC-ORBIS-P3-GESTUS SPEC-ORBIS-P3-SETTINGS */
 export async function bootstrap(): Promise<void> {
   if (!app.requestSingleInstanceLock()) {
     app.quit()
@@ -48,6 +53,7 @@ export async function bootstrap(): Promise<void> {
   const disposeSessionPermissions = [...restrictedSessions].map(denySessionPermissions)
 
   const db = openDatabase()
+  const bindingStore = new BindingStore(db)
   const pageRepository = new PageRepository(db)
   const habitusService = new HabitusService(db)
   const comparatioService = new ComparatioService(db)
@@ -66,11 +72,17 @@ export async function bootstrap(): Promise<void> {
     onNewCura: () => createCura(),
     onCuraChanged: (cura) => service.update(cura),
     onWebContentsCreated: (window, webContents) => {
-      registerLocalShortcuts(webContents, (id) => run(id, window))
+      registerLocalShortcuts(webContents, (id) => run(id, window), () => bindingStore.keyBindings())
     }
   }, graphStore, habitusService, comparatioService, new FormaRegistry([amazonForma]))
 
   const resolveWindow = (senderId: number): BrowserWindow | undefined => factory.resolveUiWindow(senderId)
+  const resolveAnyWindow = (senderId: number): BrowserWindow | undefined => factory.resolveWindow(senderId)
+  const registerBindings = (): void => registerGlobalShortcuts((id) => {
+    const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    if (window) run(id, window)
+  }, bindingStore.keyBindings())
+  const gestus = new GestusService(bindingStore, run)
   const disposeIpc = [
     registerActionHandler(resolveWindow, run),
     registerNavigateHandler(resolveWindow, (window, url) => factory.navigate(window, url)),
@@ -80,7 +92,10 @@ export async function bootstrap(): Promise<void> {
     registerGraphPaneHandler(resolveWindow, (window, collapsed, layout) => factory.setGraphPane(window, collapsed, layout)),
     registerPageContentHandler((senderId, content) => factory.savePageContent(senderId, content)),
     registerProductFactsHandler((senderId, facts) => factory.saveProductFacts(senderId, facts)),
-    registerComparatioHandler((senderId) => { const window = resolveWindow(senderId); if (window) factory.toggleComparatio(window) })
+    registerComparatioHandler((senderId) => { const window = resolveWindow(senderId); if (window) factory.toggleComparatio(window) }),
+    registerGestureHandler(resolveAnyWindow, (window, points, complete) => gestus.update(window, points, complete)),
+    registerBindingHandler(resolveWindow, bindingStore, registerBindings),
+    registerSettingsPaneHandler(resolveWindow, (window, open) => factory.setSettingsPaneOpen(window, open))
   ]
   app.once('will-quit', () => {
     unregisterGlobalShortcuts()
@@ -100,8 +115,5 @@ export async function bootstrap(): Promise<void> {
     if (process.platform !== 'darwin') app.quit()
   })
 
-  registerGlobalShortcuts((id) => {
-    const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-    if (window) run(id, window)
-  })
+  registerBindings()
 }

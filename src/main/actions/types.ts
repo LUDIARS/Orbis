@@ -19,6 +19,7 @@ export interface CuraController {
   toggleGraphLayout(window: BrowserWindow): void
   setHabitus(window: BrowserWindow, id: HabitusId): void
   toggleComparatio(window: BrowserWindow): void
+  cycleHabitus(window: BrowserWindow): void
 }
 
 export interface ActionContext {

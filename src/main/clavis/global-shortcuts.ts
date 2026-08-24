@@ -1,13 +1,9 @@
 import { globalShortcut } from 'electron'
+import type { Binding } from './bindings.js'
 import { defaultBindings } from './bindings.js'
+import { rebindGlobalShortcuts } from './rebind.js'
 import type { ActionId } from '../actions/types.js'
 
-/** @implements SPEC-ORBIS-P0-CLAVIS */
-export function registerGlobalShortcuts(execute: (id: ActionId) => void): void {
-  for (const binding of defaultBindings.filter((item) => item.global)) {
-    if (globalShortcut.register(binding.accelerator, () => execute(binding.actionId))) continue
-    globalShortcut.unregisterAll()
-    throw new Error(`Unable to register required shortcut: ${binding.accelerator}`)
-  }
-}
+/** @implements SPEC-ORBIS-P0-CLAVIS SPEC-ORBIS-P3-CLAVIS */
+export function registerGlobalShortcuts(execute: (id: ActionId) => void, bindings: Binding[] = defaultBindings): void { rebindGlobalShortcuts(bindings, execute) }
 export const unregisterGlobalShortcuts = (): void => globalShortcut.unregisterAll()

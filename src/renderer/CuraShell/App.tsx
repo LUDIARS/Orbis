@@ -1,14 +1,16 @@
 import { useEffect, useState, type ReactElement } from 'react'
-import { channels, curaLayout, type ComparatioViewState, type FenestraViewState, type GraphLayout, type GraphViewState, type HabitusId, type PageViewState } from '../../shared/ipc-contract'
+import { channels, curaLayout, type ComparatioViewState, type FenestraViewState, type GestureOverlayState, type GraphLayout, type GraphViewState, type HabitusId, type PageViewState } from '../../shared/ipc-contract'
 import { AddressBar } from '../AddressBar/AddressBar'
 import { PageTabs } from '../PageTabs/PageTabs'
 import { GraphPane } from '../GraphPane/GraphPane'
 import { SearchBox } from '../Indagatio/SearchBox'
 import { HabitusSwitcher } from '../HabitusSwitcher/HabitusSwitcher'
 import { ComparatioPanel } from '../Comparatio/ComparatioPanel'
+import { GestureOverlay } from '../GestureOverlay/GestureOverlay'
+import { SettingsPane } from '../Settings/SettingsPane'
 import styles from './App.module.css'
 
-/** @implements SPEC-ORBIS-P0-RENDERER */
+/** @implements SPEC-ORBIS-P0-RENDERER SPEC-ORBIS-P3-OVERLAY SPEC-ORBIS-P3-SETTINGS */
 export function App(): ReactElement {
   const [pages, setPages] = useState<PageViewState[]>([])
   const [activePageId, setActivePageId] = useState<string | null>(null)
@@ -21,6 +23,8 @@ export function App(): ReactElement {
   const [focusToken, setFocusToken] = useState(0)
   const [habitus, setHabitus] = useState<HabitusId>('desktop')
   const [comparatio, setComparatio] = useState<ComparatioViewState>({ open: false, products: [] })
+  const [gesture, setGesture] = useState<GestureOverlayState>({ points: [], stroke: null, actionName: null, active: false })
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const current = pages.find((page) => page.id === activePageId)
   const contentTop = curaLayout.toolbarHeight + (comparatio.open
     ? curaLayout.comparatioPanelHeight
@@ -42,6 +46,7 @@ export function App(): ReactElement {
     })
     const disposeHabitus = window.orbis.on(channels.habitusState, (state) => setHabitus(state.id))
     const disposeComparatio = window.orbis.on(channels.comparatio, setComparatio)
+    const disposeGesture = window.orbis.on(channels.gestureOverlay, setGesture)
     window.orbis.ready()
     return () => {
       disposePages()
@@ -53,6 +58,7 @@ export function App(): ReactElement {
       disposeToggle()
       disposeHabitus()
       disposeComparatio()
+      disposeGesture()
     }
   }, [])
 
@@ -70,6 +76,7 @@ export function App(): ReactElement {
         <button onClick={() => { const next = layout === 'force' ? 'timeline' : 'force'; setLayout(next); window.orbis.setGraphLayout(next) }}>
           Layout
         </button>
+        <button onClick={() => setSettingsOpen(true)}>Settings</button>
       </section>
       <ComparatioPanel className={styles.comparatio} state={comparatio} onToggle={() => window.orbis.toggleComparatio()} />
       <GraphPane
@@ -84,6 +91,8 @@ export function App(): ReactElement {
       <span className={styles.status} role={navigationError ? 'alert' : undefined}>
         {navigationError ?? `${fenestra.alwaysOnTop ? '📌 top ' : ''}${Math.round(fenestra.opacity * 100)}%`}
       </span>
+      <GestureOverlay state={gesture} />
+      <SettingsPane open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </main>
   )
 }

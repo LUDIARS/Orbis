@@ -19,7 +19,13 @@ export const channels = {
   habitusState: 'orbis:habitus-state',
   productFacts: 'orbis:product-facts',
   comparatio: 'orbis:comparatio',
-  comparatioToggle: 'orbis:comparatio-toggle'
+  comparatioToggle: 'orbis:comparatio-toggle',
+  gesture: 'orbis:gesture',
+  gestureOverlay: 'orbis:gesture-overlay',
+  bindings: 'orbis:bindings',
+  bindingSave: 'orbis:binding-save',
+  bindingReset: 'orbis:binding-reset',
+  settingsPane: 'orbis:settings-pane'
 } as const
 
 export interface PageViewState {
@@ -52,6 +58,10 @@ export type HabitusId = 'desktop' | 'mobile' | 'shopping'
 export interface HabitusViewState { id: HabitusId }
 export interface ProductFactsView { id: string; title: string; price: string | null; rating: string | null; reviewCount: string | null; delivery: string | null; url: string }
 export interface ComparatioViewState { open: boolean; products: ProductFactsView[] }
+export interface GesturePoint { x: number; y: number; at: number }
+export interface GestureOverlayState { points: GesturePoint[]; stroke: string | null; actionName: string | null; active: boolean }
+export type BindingScope = 'key' | 'gesture'
+export interface BindingView { id: string; actionId: ActionId; accelerator: string; scope: BindingScope }
 
 export interface RendererEventMap {
   [channels.pages]: PagesViewState
@@ -63,6 +73,7 @@ export interface RendererEventMap {
   [channels.toggleGraphLayout]: undefined
   [channels.habitusState]: HabitusViewState
   [channels.comparatio]: ComparatioViewState
+  [channels.gestureOverlay]: GestureOverlayState
 }
 
 export type RendererEventName = keyof RendererEventMap
@@ -76,6 +87,11 @@ export interface OrbisBridge {
   setGraphPaneCollapsed(collapsed: boolean): void
   setHabitus(id: HabitusId): void
   toggleComparatio(): void
+  gesture(points: GesturePoint[], complete: boolean): void
+  bindings(scope: BindingScope): Promise<BindingView[]>
+  saveBinding(binding: BindingView): Promise<void>
+  resetBindings(scope: BindingScope): Promise<void>
+  setSettingsPaneOpen(open: boolean): void
   ready(): void
   on<K extends RendererEventName>(channel: K, listener: (value: RendererEventMap[K]) => void): () => void
 }

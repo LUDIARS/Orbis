@@ -15,3 +15,5 @@ export type ActionId =
   | 'habitus.set:mobile'
   | 'habitus.set:shopping'
   | 'comparatio.toggle'
+  | 'habitus.cycle'
+  | 'rota.open'
