@@ -13,9 +13,11 @@
     "package:dir": "npm run build && electron-builder --dir"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "cytoscape": "^3.34.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "zod": "^4.4.3",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
