@@ -25,7 +25,13 @@ export const channels = {
   bindings: 'orbis:bindings',
   bindingSave: 'orbis:binding-save',
   bindingReset: 'orbis:binding-reset',
-  settingsPane: 'orbis:settings-pane'
+  settingsPane: 'orbis:settings-pane',
+  rotaSnapshot: 'orbis:rota-snapshot',
+  rotaSelectCura: 'orbis:rota-select-cura',
+  rotaSelectPage: 'orbis:rota-select-page',
+  rotaSearch: 'orbis:rota-search',
+  rotaClose: 'orbis:rota-close',
+  rotaReady: 'orbis:rota-ready'
 } as const
 
 export interface PageViewState {
@@ -63,6 +69,28 @@ export interface GestureOverlayState { points: GesturePoint[]; stroke: string | 
 export type BindingScope = 'key' | 'gesture'
 export interface BindingView { id: string; actionId: ActionId; accelerator: string; scope: BindingScope }
 
+/** @implements SPEC-ORBIS-P4-SNAPSHOT */
+export interface RotaPageView {
+  id: string
+  title: string
+  url: string
+  lastVisit: string
+}
+
+/** @implements SPEC-ORBIS-P4-SNAPSHOT */
+export interface RotaCuraView {
+  id: string
+  title: string
+  color: string
+  nodeCount: number
+  pages: RotaPageView[]
+}
+
+/** @implements SPEC-ORBIS-P4-SNAPSHOT */
+export interface RotaSnapshot {
+  curas: RotaCuraView[]
+}
+
 export interface RendererEventMap {
   [channels.pages]: PagesViewState
   [channels.navigationError]: string
@@ -74,6 +102,7 @@ export interface RendererEventMap {
   [channels.habitusState]: HabitusViewState
   [channels.comparatio]: ComparatioViewState
   [channels.gestureOverlay]: GestureOverlayState
+  [channels.rotaSnapshot]: RotaSnapshot
 }
 
 export type RendererEventName = keyof RendererEventMap
@@ -92,6 +121,11 @@ export interface OrbisBridge {
   saveBinding(binding: BindingView): Promise<void>
   resetBindings(scope: BindingScope): Promise<void>
   setSettingsPaneOpen(open: boolean): void
+  rotaSelectCura(curaId: string): void
+  rotaSelectPage(curaId: string, pageId: string): void
+  rotaSearch(query: string): void
+  rotaClose(): void
+  rotaReady(): void
   ready(): void
   on<K extends RendererEventName>(channel: K, listener: (value: RendererEventMap[K]) => void): () => void
 }

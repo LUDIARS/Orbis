@@ -1,0 +1,1 @@
+{"name":"rota","description":"Cura を円状に選択する常駐オーバーレイと表示スナップショット。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/rota/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)src/renderer/Rota/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)src/renderer/rota(?:\\.html|\\.tsx)$"},{"pathPattern":"(^|/)test/rota-(?:actions|snapshot|wheel-layout)\\.test\\.ts$"}]}

@@ -14,7 +14,8 @@ const rendererEvents = new Set<RendererEventName>([
   channels.searchResult,
   channels.habitusState,
   channels.comparatio,
-  channels.gestureOverlay
+  channels.gestureOverlay,
+  channels.rotaSnapshot
 ])
 
 /** @implements SPEC-ORBIS-P0-IPC */
@@ -32,6 +33,11 @@ const bridge: OrbisBridge = {
   saveBinding: (binding) => ipcRenderer.invoke(channels.bindingSave, binding),
   resetBindings: (scope) => ipcRenderer.invoke(channels.bindingReset, scope),
   setSettingsPaneOpen: (open) => ipcRenderer.send(channels.settingsPane, open),
+  rotaSelectCura: (curaId) => ipcRenderer.send(channels.rotaSelectCura, curaId),
+  rotaSelectPage: (curaId, pageId) => ipcRenderer.send(channels.rotaSelectPage, curaId, pageId),
+  rotaSearch: (query) => ipcRenderer.send(channels.rotaSearch, query),
+  rotaClose: () => ipcRenderer.send(channels.rotaClose),
+  rotaReady: () => ipcRenderer.send(channels.rotaReady),
   ready: () => ipcRenderer.send(channels.ready),
   on: <K extends RendererEventName>(channel: K, listener: (value: RendererEventMap[K]) => void): (() => void) => {
     if (!rendererEvents.has(channel)) throw new TypeError(`Unsupported renderer event: ${channel}`)

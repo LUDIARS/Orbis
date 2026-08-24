@@ -1,10 +1,12 @@
 import { app, BrowserWindow, session } from 'electron'
+import { join } from 'node:path'
 import { executeAction } from '../actions/registry.js'
 import type { ActionId } from '../actions/types.js'
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from '../clavis/global-shortcuts.js'
 import { registerLocalShortcuts } from '../clavis/local-shortcuts.js'
 import { CuraService } from '../cura/service.js'
 import { CuraWindowFactory } from '../cura/window-factory.js'
+import { normalizeDevelopmentRendererUrl } from '../cura/navigation-url.js'
 import { registerActionHandler } from '../ipc/handlers/register-action-handler.js'
 import { registerNavigateHandler } from '../ipc/handlers/register-navigate-handler.js'
 import { registerReadyHandler } from '../ipc/handlers/register-ready-handler.js'
@@ -29,8 +31,13 @@ import { GestusService } from '../gestus/service.js'
 import { registerGestureHandler } from '../ipc/handlers/register-gesture-handler.js'
 import { registerBindingHandler } from '../ipc/handlers/register-binding-handler.js'
 import { registerSettingsPaneHandler } from '../ipc/handlers/register-settings-pane-handler.js'
+import { registerRotaHandler } from '../ipc/handlers/register-rota-handler.js'
+import { RotaOverlayWindow } from '../rota/overlay-window.js'
+import { selectRotaCura, selectRotaPage } from '../rota/actions.js'
+import { buildRotaSnapshot } from '../rota/snapshot.js'
+import { filterRotaSnapshot } from '../rota/search.js'
 
-/** @implements SPEC-ORBIS-P0-RADIX SPEC-ORBIS-P3-CLAVIS SPEC-ORBIS-P3-GESTUS SPEC-ORBIS-P3-SETTINGS */
+/** @implements SPEC-ORBIS-P0-RADIX SPEC-ORBIS-P3-CLAVIS SPEC-ORBIS-P3-GESTUS SPEC-ORBIS-P3-SETTINGS SPEC-ORBIS-P4-ROTA SPEC-ORBIS-P4-OVERLAY */
 export async function bootstrap(): Promise<void> {
   if (!app.requestSingleInstanceLock()) {
     app.quit()
@@ -55,14 +62,24 @@ export async function bootstrap(): Promise<void> {
   const db = openDatabase()
   const bindingStore = new BindingStore(db)
   const pageRepository = new PageRepository(db)
+  const curaRepository = new CuraRepository(db)
   const habitusService = new HabitusService(db)
   const comparatioService = new ComparatioService(db)
   const graphStore = new GraphStore()
-  const service = new CuraService(new CuraRepository(db))
+  const service = new CuraService(curaRepository)
   let factory: CuraWindowFactory
+  const rotaOverlay = new RotaOverlayWindow({
+    loadUrl: process.env.ELECTRON_RENDERER_URL
+      ? new URL('rota.html', normalizeDevelopmentRendererUrl(process.env.ELECTRON_RENDERER_URL)).toString()
+      : null,
+    preloadPath: join(__dirname, '../preload/index.js')
+  })
+  const rota = {
+    open: (): void => rotaOverlay.open(buildRotaSnapshot(curaRepository, pageRepository, graphStore))
+  }
   const run = (id: ActionId, window: BrowserWindow): void => {
     void Promise.resolve()
-      .then(() => executeAction(id, { window, cura: factory }))
+      .then(() => executeAction(id, { window, cura: factory, rota }))
       .catch((error: unknown) => console.error('Action failed.', error))
   }
   function createCura(): BrowserWindow {
@@ -95,8 +112,24 @@ export async function bootstrap(): Promise<void> {
     registerComparatioHandler((senderId) => { const window = resolveWindow(senderId); if (window) factory.toggleComparatio(window) }),
     registerGestureHandler(resolveAnyWindow, (window, points, complete) => gestus.update(window, points, complete)),
     registerBindingHandler(resolveWindow, bindingStore, registerBindings),
-    registerSettingsPaneHandler(resolveWindow, (window, open) => factory.setSettingsPaneOpen(window, open))
+    registerSettingsPaneHandler(resolveWindow, (window, open) => factory.setSettingsPaneOpen(window, open)),
+    registerRotaHandler({
+      isOverlay: (senderId) => rotaOverlay.isOverlay(senderId),
+      selectCura: (curaId) => selectRotaCura(curaId, curaRepository, pageRepository, factory),
+      selectPage: (curaId, pageId) => {
+        selectRotaPage(curaId, pageId, curaRepository, pageRepository, factory)
+        rotaOverlay.close()
+      },
+      search: (query) => rotaOverlay.update(filterRotaSnapshot(
+        pageRepository,
+        buildRotaSnapshot(curaRepository, pageRepository, graphStore),
+        query
+      )),
+      close: () => rotaOverlay.close(),
+      ready: () => rotaOverlay.rendererReady()
+    })
   ]
+  app.once('before-quit', () => rotaOverlay.destroy())
   app.once('will-quit', () => {
     unregisterGlobalShortcuts()
     for (const dispose of disposeIpc) dispose()

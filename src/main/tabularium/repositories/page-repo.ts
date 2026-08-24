@@ -59,7 +59,7 @@ export class PageRepository {
 
   listByCura(curaId: string): Page[] {
     const rows = this.db
-      .prepare('SELECT * FROM page WHERE cura_id = ? AND active = 1 ORDER BY last_visit')
+      .prepare('SELECT * FROM page WHERE cura_id = ? AND active = 1 ORDER BY last_visit DESC')
       .all(curaId) as Record<string, unknown>[]
     return rows.map(rowToPage)
   }

@@ -22,9 +22,15 @@ export interface CuraController {
   cycleHabitus(window: BrowserWindow): void
 }
 
+/** Rota Action が触れるオーバーレイ操作面。 */
+export interface RotaController {
+  open(): void
+}
+
 export interface ActionContext {
   window: BrowserWindow
   cura: CuraController
+  rota: RotaController
 }
 
 export type Action = (context: ActionContext) => void | Promise<void>

@@ -1,0 +1,9 @@
+.overlay { min-height: 100vh; box-sizing: border-box; padding: 32px; color: #edf2ff; background: rgba(13, 18, 32, .9); font-family: system-ui, sans-serif; }
+.search { width: 300px; padding: 10px 14px; border: 1px solid #65739a; border-radius: 8px; color: inherit; background: #18213b; }
+.wheel { position: absolute; inset: 80px 380px 24px 24px; min-width: 460px; }
+.cura, .curaSelected { position: absolute; transform: translate(-50%, -50%); display: grid; gap: 3px; min-width: 116px; padding: 10px; border: 2px solid; border-radius: 12px; color: inherit; background: #202b49; cursor: pointer; }
+.curaSelected { background: #354873; box-shadow: 0 0 18px #9bb8ff; }
+.color { width: 12px; height: 12px; border-radius: 50%; }
+.pages { position: absolute; top: 80px; right: 24px; bottom: 24px; width: 310px; overflow: auto; padding: 16px; border-radius: 12px; background: rgba(30, 42, 71, .92); }
+.page { display: grid; width: 100%; gap: 5px; margin: 8px 0; padding: 10px; overflow: hidden; border: 0; border-radius: 8px; text-align: left; color: inherit; background: #253354; cursor: pointer; }
+.page span { overflow: hidden; color: #bdcae9; text-overflow: ellipsis; white-space: nowrap; }

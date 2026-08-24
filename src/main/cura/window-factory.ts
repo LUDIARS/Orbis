@@ -114,7 +114,7 @@ export class CuraWindowFactory implements CuraController {
         opacity: cura.opacity
       })
       for (const page of restore) this.createPage(entry, page.url, null, 'navigate', page, false)
-      const restoredPage = entry.pages.at(-1)
+      const restoredPage = entry.pages[0]
       if (restoredPage) this.activatePage(entry, restoredPage)
       else this.createPage(entry, DEFAULT_URL)
     })
@@ -291,6 +291,11 @@ export class CuraWindowFactory implements CuraController {
 
   minimizeOthers(): void {
     minimizeNonPinned([...this.windows.values()].map((entry) => entry.window))
+  }
+
+  /** @implements SPEC-ORBIS-P4-OVERLAY */
+  windowForCura(curaId: string): BrowserWindow | undefined {
+    return [...this.windows.values()].find((entry) => entry.cura.id === curaId)?.window
   }
 
   private entryOf(window: BrowserWindow): CuraWindow | undefined {

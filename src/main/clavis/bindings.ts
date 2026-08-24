@@ -2,7 +2,7 @@ import type { ActionId } from '../actions/types.js'
 /** @implements SPEC-ORBIS-P3-CLAVIS */
 export interface Binding { accelerator: string; actionId: ActionId; global: boolean }
 export const defaultBindings: Binding[] = [
-  { accelerator: 'CommandOrControl+Shift+Space', actionId: 'rota.open', global: false },
+  { accelerator: 'CommandOrControl+Shift+Space', actionId: 'rota.open', global: true },
   { accelerator: 'CommandOrControl+Shift+T', actionId: 'fenestra.alwaysOnTop.toggle', global: true },
   { accelerator: 'CommandOrControl+Shift+M', actionId: 'fenestra.minimizeOthers', global: true },
   { accelerator: 'CommandOrControl+Shift+O', actionId: 'fenestra.opacity.cycle', global: true },
