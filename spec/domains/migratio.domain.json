@@ -1,0 +1,1 @@
+{"name":"migratio","description":"Chrome/Vivaldi のブックマークと履歴を Tabularium へ冪等に取り込む。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/migratio/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)scripts/import\\.mjs$"},{"pathPattern":"(^|/)test/migratio-.*\\.test\\.ts$"}]}

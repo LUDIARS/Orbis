@@ -8,6 +8,7 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "import": "node scripts/import.mjs",
     "check:electron-eol": "node scripts/check-electron-eol.mjs",
     "package:dir": "npm run build && electron-builder --dir"
   },
