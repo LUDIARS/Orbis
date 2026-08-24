@@ -1,0 +1,1 @@
+{"name":"preload","description":"隔離世界の安全なページ／UI ブリッジ。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/preload/(?:.*/)?[^/]+$"}]}

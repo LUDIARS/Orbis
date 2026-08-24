@@ -1,0 +1,1 @@
+{"name":"cura","description":"関心ウインドウとページ表示の生成・選択・破棄。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/cura/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)test/navigation-url\\.test\\.ts$"}]}

@@ -1,0 +1,1 @@
+{"name":"ipc","description":"main、preload、renderer 間の型付き・送信元検証済み通信契約。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/ipc/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)src/shared/ipc-contract\\.ts$"}]}

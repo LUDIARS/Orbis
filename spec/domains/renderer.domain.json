@@ -1,0 +1,1 @@
+{"name":"renderer","description":"Cura のアドレスバーとページタブ UI。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/renderer/(?:.*/)?[^/]+$"}]}

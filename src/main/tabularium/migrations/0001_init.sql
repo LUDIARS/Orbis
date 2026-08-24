@@ -1,0 +1,25 @@
+CREATE TABLE IF NOT EXISTS cura (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL, color TEXT NOT NULL, habitus_id TEXT,
+  always_on_top INTEGER NOT NULL DEFAULT 0, opacity REAL NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL, last_active_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS page (
+  id TEXT PRIMARY KEY, cura_id TEXT NOT NULL REFERENCES cura(id), url TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '', favicon TEXT, thumbnail TEXT, first_visit TEXT NOT NULL,
+  last_visit TEXT NOT NULL, pinned INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS edge (
+  id INTEGER PRIMARY KEY, cura_id TEXT NOT NULL, from_page_id TEXT, to_page_id TEXT,
+  kind TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 1, last_at TEXT NOT NULL,
+  FOREIGN KEY (cura_id) REFERENCES cura(id),
+  FOREIGN KEY (from_page_id) REFERENCES page(id),
+  FOREIGN KEY (to_page_id) REFERENCES page(id)
+);
+CREATE TABLE IF NOT EXISTS visit (
+  id INTEGER PRIMARY KEY,
+  page_id TEXT NOT NULL REFERENCES page(id),
+  visited_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS habitus (id TEXT PRIMARY KEY, name TEXT NOT NULL, data TEXT NOT NULL DEFAULT '{}');
+CREATE TABLE IF NOT EXISTS binding (id TEXT PRIMARY KEY, action_id TEXT NOT NULL, accelerator TEXT NOT NULL, scope TEXT NOT NULL);
+CREATE VIRTUAL TABLE IF NOT EXISTS page_fts USING fts5(title, url, content);

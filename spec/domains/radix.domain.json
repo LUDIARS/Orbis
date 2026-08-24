@@ -1,0 +1,1 @@
+{"name":"radix","description":"Electron の起動、単一インスタンス、ライフサイクル、版追従。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/radix/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)src/main/index\\.ts$"},{"pathPattern":"(^|/)scripts/check-electron-eol\\.mjs$"},{"pathPattern":"(^|/)\\.github/workflows/(?:ci|electron-watch)\\.yml$"}]}

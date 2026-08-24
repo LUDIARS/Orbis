@@ -1,0 +1,1 @@
+{"name":"clavis","description":"ローカルおよびグローバルのショートカット。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/clavis/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)test/clavis-bindings\\.test\\.ts$"}]}

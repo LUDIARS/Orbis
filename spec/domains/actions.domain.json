@@ -1,0 +1,1 @@
+{"name":"actions","description":"ActionId に解決した利用者操作。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/actions/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)src/shared/action-id\\.ts$"},{"pathPattern":"(^|/)test/actions-registry\\.test\\.ts$"}]}

@@ -60,7 +60,7 @@
 - ウインドウ内のページは **WebContentsView** (BrowserView 後継) を 1 ページ 1 view で保持
 - UI (グラフ、Rota、設定) は Electron renderer の SPA: **Vite + React + TypeScript** (LUDIARS 既存 = Corpus / Iter / VOB と同じ。neco 決定 2026-08-24)。状態は zustand、スタイルは CSS Modules
 - グラフ描画: Cytoscape.js (力学レイアウト + 検索ハイライト)
-- 永続化: better-sqlite3 (Tabularium)
+- 永続化: SQLite (Tabularium)。 Node/Electron 同梱の `node:sqlite` を使う (better-sqlite3 は Electron ABI 再ビルドが vitest と衝突するため P0 で不採用)
 - テスト: vitest (単体)、Playwright for Electron (E2E)
 
 ## 3. アーキテクチャ
@@ -168,7 +168,7 @@ type ActionId = "page.back" | "page.forward" | "page.close" | "cura.new" | "cura
 
 ```
 Orbis/
-  package.json            electron, better-sqlite3, cytoscape, vite
+  package.json            electron, cytoscape, vite (SQLite は node:sqlite)
   src/main/
     radix/                bootstrap, single-instance, updater 境界
     cura/                 service.ts, repository.ts, window-factory.ts

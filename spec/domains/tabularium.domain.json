@@ -1,0 +1,1 @@
+{"name":"tabularium","description":"SQLite のスキーマとトランザクション境界を持つ永続化リポジトリ。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/tabularium/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)test/tabularium-repositories\\.test\\.ts$"}]}

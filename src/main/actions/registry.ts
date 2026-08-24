@@ -1,0 +1,27 @@
+import { curaNew } from './cura-new.js'
+import { fenestraAlwaysOnTopToggle } from './fenestra-always-on-top-toggle.js'
+import { fenestraMinimizeOthers } from './fenestra-minimize-others.js'
+import { fenestraOpacityCycle } from './fenestra-opacity-cycle.js'
+import { pageBack } from './page-back.js'
+import { pageClose } from './page-close.js'
+import { pageForward } from './page-forward.js'
+import { pageNew } from './page-new.js'
+import { pageReload } from './page-reload.js'
+import type { Action, ActionContext, ActionId } from './types.js'
+
+const actions: Record<ActionId, Action> = {
+  'page.back': pageBack,
+  'page.forward': pageForward,
+  'page.reload': pageReload,
+  'page.new': pageNew,
+  'page.close': pageClose,
+  'cura.new': curaNew,
+  'fenestra.alwaysOnTop.toggle': fenestraAlwaysOnTopToggle,
+  'fenestra.minimizeOthers': fenestraMinimizeOthers,
+  'fenestra.opacity.cycle': fenestraOpacityCycle
+}
+
+/** @implements SPEC-ORBIS-P0-ACTIONS */
+export const executeAction = (id: ActionId, context: ActionContext): void | Promise<void> => actions[id](context)
+export const isActionId = (value: string): value is ActionId => Object.hasOwn(actions, value)
+export const actionIds = Object.freeze(Object.keys(actions) as ActionId[])
