@@ -32,6 +32,14 @@ export async function readOuterHtml(webContents: WebContents, limit = 64 * 1024)
   })
 }
 
+/** @implements SPEC-ORBIS-P6-ACCESSIBILITY Returns a bounded, serializable accessibility tree. */
+export async function readAccessibilityTree(webContents: WebContents, limit = 500): Promise<unknown[]> {
+  return withDebugger(webContents, async (send) => {
+    const result = await send('Accessibility.getFullAXTree') as { nodes?: unknown[] }
+    return (result.nodes ?? []).slice(0, limit)
+  })
+}
+
 /**
  * 画面に出ていない非アクティブ view でも撮れるよう、compositor ではなく renderer から取る。
  * ウインドウへ attach していない Umbra view では応答が返らないことがあるため待ち時間で打ち切る。

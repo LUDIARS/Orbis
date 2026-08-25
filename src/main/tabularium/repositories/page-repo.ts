@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 
-export type NavigationKind = 'navigate' | 'newview' | 'llm'
+export type NavigationKind = 'navigate' | 'newview' | 'llm' | 'explore'
 
 export interface Page {
   id: string

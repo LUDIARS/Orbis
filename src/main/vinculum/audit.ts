@@ -1,7 +1,31 @@
 import type { DatabaseSync } from 'node:sqlite'
 
 const REDACTED = '[redacted]'
-const sensitiveKeys = new Set(['authorization', 'base64', 'body', 'content', 'cookie', 'credentials', 'html', 'password', 'payload', 'secret', 'set-cookie', 'text', 'token', 'transcript'])
+const sensitiveKeys = new Set(['authorization', 'base64', 'body', 'content', 'cookie', 'credentials', 'html', 'password', 'payload', 'query', 'secret', 'selection', 'set-cookie', 'summary', 'text', 'token', 'transcript'])
+const bearerToken = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
+const secretAssignment = /\b(authorization|cookie|password|secret|session(?:id)?|token)["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi
+const fileUrl = /\bfile:\/\/[^\s"'<>]+/gi
+const windowsPath = /\b[A-Za-z]:\\[^\s\r\n"'<>]*/g
+const webUrl = /\bhttps?:\/\/[^\s"'<>()[\]]+/gi
+
+/** @implements SPEC-ORBIS-P6-AUDIT Remove common capability values and local paths from untrusted diagnostics. */
+export function redactAuditText(value: string): string {
+  return value
+    .replace(bearerToken, 'Bearer [redacted]')
+    .replace(secretAssignment, '$1=[redacted]')
+    .replace(fileUrl, '[local path]')
+    .replace(windowsPath, '[local path]')
+    .replace(webUrl, (candidate) => {
+      try {
+        const url = new URL(candidate)
+        url.username = ''
+        url.password = ''
+        url.search = ''
+        url.hash = ''
+        return url.toString()
+      } catch { return REDACTED }
+    })
+}
 
 /** @implements SPEC-ORBIS-P5-AUDIT Persist only bounded, non-secret operation metadata. */
 function auditValue(key: string, value: unknown): unknown {
@@ -19,7 +43,9 @@ function auditValue(key: string, value: unknown): unknown {
       return REDACTED
     }
   }
-  return typeof value === 'string' && value.length > 512 ? `${value.slice(0, 512)}…` : value
+  if (typeof value !== 'string') return value
+  const redacted = redactAuditText(value)
+  return redacted.length > 512 ? `${redacted.slice(0, 512)}…` : redacted
 }
 
 export function summarizePayload(payload: unknown): string {

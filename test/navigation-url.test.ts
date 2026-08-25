@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isAllowedExplorationUrl,
   normalizeDevelopmentRendererUrl,
   normalizeNavigationUrl
 } from '../src/main/cura/navigation-url.js'
@@ -19,5 +20,23 @@ describe('navigation URL boundary', () => {
     expect(normalizeDevelopmentRendererUrl('http://localhost:5173')).toBe('http://localhost:5173/')
     expect(() => normalizeDevelopmentRendererUrl('https://example.com')).toThrow(/loopback/i)
     expect(() => normalizeDevelopmentRendererUrl('http://user:secret@localhost:5173')).toThrow(/credentials/i)
+  })
+
+  it.each([
+    'http://localhost',
+    'http://localhost.',
+    'http://printer.local.',
+    'http://127.0.0.1',
+    'http://10.0.0.5',
+    'http://172.16.0.5',
+    'http://192.168.0.5',
+    'http://[::1]',
+    'https://example.com:8443'
+  ])('blocks private or nonstandard exploration target %s', (value) => {
+    expect(isAllowedExplorationUrl(value)).toBe(false)
+  })
+
+  it('allows a public HTTP(S) exploration target', () => {
+    expect(isAllowedExplorationUrl('https://example.com/article')).toBe(true)
   })
 })

@@ -18,6 +18,7 @@ import { FormaRegistry } from '../forma/registry.js'
 import { injectForma } from '../forma/injector.js'
 import { selectUmbraEvictions } from '../umbra/service.js'
 import {
+  isAllowedExplorationUrl,
   isAllowedNavigationUrl,
   normalizeDevelopmentRendererUrl,
   normalizeNavigationUrl
@@ -55,6 +56,7 @@ export interface CuraWindowFactoryHooks {
   onNewCura(): void
   onCuraChanged(cura: Cura): void
   onWebContentsCreated(window: BrowserWindow, webContents: WebContents): void
+  onPageCreated?(curaId: string, pageId: string, webContents: WebContents): void
   onCuraClosed?(curaId: string): void
   onRevealUmbra?(curaId: string, pageId: string): void
   onPageClosed?(curaId: string, pageId: string): void
@@ -196,13 +198,13 @@ export class CuraWindowFactory implements CuraController {
   }
 
   /** @implements SPEC-ORBIS-P5-UMBRA */
-  private revealUmbra(entry: CuraWindow, tab: CuraPage): void {
+  private revealUmbra(entry: CuraWindow, tab: CuraPage, recordUserAction = true): void {
     tab.umbra = false
     tab.page = { ...tab.page, umbra: false }
     this.pageRepository.save(tab.page)
     this.updateGraph(entry, tab.page, null, 'navigate')
     this.activatePage(entry, tab)
-    this.hooks.onRevealUmbra?.(entry.cura.id, tab.viewKey)
+    if (recordUserAction) this.hooks.onRevealUmbra?.(entry.cura.id, tab.viewKey)
   }
 
   search(window: BrowserWindow, query: string): string[] { const entry = this.entryOf(window); return entry ? this.pageRepository.search(entry.cura.id, query) : [] }
@@ -343,6 +345,24 @@ export class CuraWindowFactory implements CuraController {
     return { pageId: tab.viewKey }
   }
 
+  /** @implements SPEC-ORBIS-P6-EXPLORATIO Creates a non-visible traversal edge distinct from ordinary LLM navigation. */
+  openExplorationPage(curaId: string, url: string, fromPageId: string | null): { pageId: string } {
+    const entry = [...this.windows.values()].find((candidate) => candidate.cura.id === curaId)
+    if (!entry) throw new Error('The Cura window is not open.')
+    const from = fromPageId ? this.findTab(fromPageId)?.tab.page.id ?? null : null
+    const tab = this.createPage(entry, url, from, 'explore', undefined, false, undefined, true, false)
+    if (!tab) throw new Error('The exploration URL is not allowed.')
+    this.sendGraph(entry)
+    return { pageId: tab.viewKey }
+  }
+
+  /** @implements SPEC-ORBIS-P6-REVEAL Explicit Cc reveal reaches the same attach path as a user node selection. */
+  revealLlmPage(pageId: string): void {
+    const found = this.findTab(pageId)
+    if (!found) throw new Error('The page is not open.')
+    this.revealUmbra(found.entry, found.tab, false)
+  }
+
   /** @implements SPEC-ORBIS-P5-VINCULUM 人間と同じ経路 (loadURL + commitNavigation) で遷移し、エッジは kind=llm で残す。 */
   async navigateLlmPage(pageId: string, url: string): Promise<void> {
     const found = this.findTab(pageId)
@@ -420,6 +440,10 @@ export class CuraWindowFactory implements CuraController {
 
     const habitusId = forcedHabitusId
       ?? this.habitusService.resolve(entry.cura, restoredPage?.id ?? randomUUID())
+    if (navigationKind === 'explore' && (!isAllowedExplorationUrl(url) || !this.formaRegistry.allowsAutomation(url, habitusId))) {
+      this.reportNavigationError(entry, 'This site does not allow automated exploration.')
+      return undefined
+    }
     const preset = this.habitusService.preset(habitusId)
     const view = new WebContentsView({
       webPreferences: {
@@ -459,14 +483,22 @@ export class CuraWindowFactory implements CuraController {
       viewKey: randomUUID()
     }
     entry.pages.push(tab)
+    this.hooks.onPageCreated?.(entry.cura.id, tab.viewKey, view.webContents)
     if (preset.userAgent) view.webContents.setUserAgent(preset.userAgent)
     void applyEmulation(view.webContents, preset).catch((error: unknown) => console.error('Unable to apply initial Habitus emulation.', error))
     this.hooks.onWebContentsCreated(entry.window, view.webContents)
 
-    view.webContents.on('will-navigate', (details) => this.guardNavigation(entry, details, details.url))
-    view.webContents.on('will-redirect', (details) => this.guardNavigation(entry, details, details.url))
+    view.webContents.on('will-navigate', (details) => this.guardNavigation(entry, details, details.url, tab))
+    view.webContents.on('will-redirect', (details) => this.guardNavigation(entry, details, details.url, tab))
     view.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
-      this.createPage(entry, nextUrl, tab.page.id, navigationKindForNewView())
+      const childKind = tab.initialNavigationKind === 'explore' ? 'explore' : navigationKindForNewView()
+      if (childKind === 'explore') {
+        // Automated pages must never become visible through window.open; only
+        // an explicit reveal operation may attach an exploration view.
+        this.createPage(entry, nextUrl, tab.page.id, childKind, undefined, false, undefined, true, false)
+      } else {
+        this.createPage(entry, nextUrl, tab.page.id, childKind)
+      }
       return { action: 'deny' }
     })
     view.webContents.on('did-navigate', (_event, nextUrl) => this.commitNavigation(entry, tab, nextUrl))
@@ -508,7 +540,9 @@ export class CuraWindowFactory implements CuraController {
     if (!isAllowedNavigationUrl(nextUrl)) return
     const now = new Date().toISOString()
     const normalizedUrl = normalizeGraphUrl(nextUrl)
-    const followKind: NavigationKind = tab.llmNavigationPending ? 'llm' : 'navigate'
+    const followKind: NavigationKind = tab.initialNavigationKind === 'explore'
+      ? 'explore'
+      : tab.llmNavigationPending ? 'llm' : 'navigate'
     tab.llmNavigationPending = false
 
     if (!tab.hasCommittedNavigation) {
@@ -630,10 +664,12 @@ export class CuraWindowFactory implements CuraController {
     }
   }
 
-  private guardNavigation(entry: CuraWindow, event: Electron.Event, nextUrl: string): void {
-    if (isAllowedNavigationUrl(nextUrl)) return
+  private guardNavigation(entry: CuraWindow, event: Electron.Event, nextUrl: string, tab?: CuraPage): void {
+    if (isAllowedNavigationUrl(nextUrl) && (tab?.initialNavigationKind !== 'explore' || (isAllowedExplorationUrl(nextUrl) && this.formaRegistry.allowsAutomation(nextUrl, tab.habitusId)))) return
     event.preventDefault()
-    this.reportNavigationError(entry, 'Only HTTP and HTTPS URLs without credentials are supported.')
+    this.reportNavigationError(entry, tab?.initialNavigationKind === 'explore'
+      ? 'This destination is not allowed for automated exploration.'
+      : 'Only HTTP and HTTPS URLs without credentials are supported.')
   }
 
   private layoutView(entry: CuraWindow): void {

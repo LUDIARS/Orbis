@@ -10,4 +10,10 @@ describe('FormaRegistry', () => {
     expect(registry.matching('https://www.amazon.co.jp/dp/example', 'desktop')).toHaveLength(0)
     expect(registry.matching('https://amazon.example/dp/example', 'shopping')).toHaveLength(0)
   })
+
+  it('enforces a matching Forma automation prohibition', () => {
+    const registry = new FormaRegistry([{ id: 'private', match: (url) => url.hostname === 'private.example', disallowAutomation: true }])
+    expect(registry.allowsAutomation('https://private.example/report', 'desktop')).toBe(false)
+    expect(registry.allowsAutomation('https://public.example/report', 'desktop')).toBe(true)
+  })
 })

@@ -1,6 +1,6 @@
 import type { WebContents } from 'electron'
 import { describe, expect, it } from 'vitest'
-import { captureScreenshotPng, performAct } from '../src/main/vinculum/cdp.js'
+import { captureScreenshotPng, performAct, readAccessibilityTree } from '../src/main/vinculum/cdp.js'
 
 interface Call { method: string; params?: Record<string, unknown> }
 
@@ -53,5 +53,11 @@ describe('vinculum cdp', () => {
     const fake = fakeWebContents(() => new Promise(() => undefined))
     expect(await captureScreenshotPng(fake.webContents, 10)).toBe('')
     expect(fake.detached()).toBe(true)
+  })
+
+  it('reads a bounded accessibility tree through CDP', async () => {
+    const fake = fakeWebContents(() => Promise.resolve({ nodes: [{ nodeId: '1' }, { nodeId: '2' }] }))
+    expect(await readAccessibilityTree(fake.webContents, 1)).toEqual([{ nodeId: '1' }])
+    expect(fake.calls[0].method).toBe('Accessibility.getFullAXTree')
   })
 })

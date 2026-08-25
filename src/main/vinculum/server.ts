@@ -15,6 +15,9 @@ import { open } from './tools/open.js'
 import { read } from './tools/read.js'
 import { act } from './tools/act.js'
 import { logs } from './tools/logs.js'
+import { search } from './tools/search.js'
+import { toMemoria } from './tools/to-memoria.js'
+import { reveal } from './tools/reveal.js'
 
 const sigillumField = { sigillum: z.string().min(1) }
 const result = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] })
@@ -22,6 +25,20 @@ const MAX_REQUEST_BODY_BYTES = 1024 * 1024
 const CLIENT_ID_HEADER = 'x-orbis-client-id'
 
 class RequestBodyTooLargeError extends Error {}
+
+/** @implements SPEC-ORBIS-P6-EXPLORATIO Identify the page capabilities that search created for its caller. */
+function explorationSigilla(value: unknown): string[] {
+  if (typeof value !== 'object' || value === null) return []
+  const response = value as { searchSigillum?: unknown; results?: unknown }
+  const sigilla = typeof response.searchSigillum === 'string' ? [response.searchSigillum] : []
+  if (!Array.isArray(response.results)) return sigilla
+  for (const item of response.results) {
+    if (typeof item !== 'object' || item === null) continue
+    const sigillum = (item as { sigillum?: unknown }).sigillum
+    if (typeof sigillum === 'string') sigilla.push(sigillum)
+  }
+  return [...new Set(sigilla)]
+}
 
 /** @implements SPEC-ORBIS-P5-VINCULUM loopback + 共有トークン限定の MCP エンドポイント。Excubitor 照合は P6 (Cc 側 PR と同時に有効化)。 */
 export class VinculumServer {
@@ -114,12 +131,22 @@ export class VinculumServer {
     mcp.registerTool('orbis_read', { inputSchema: { ...sigillumField, mode: z.enum(['text', 'dom', 'a11y', 'screenshot']).default('text') } }, guarded('read', ({ sigillum, mode }, clientId) => { attached(sigillum, clientId); return read(sigillum, mode, this.operations) }))
     mcp.registerTool('orbis_act', { inputSchema: { ...sigillumField, action: z.record(z.string(), z.unknown()) } }, guarded('act', ({ sigillum, action }, clientId) => { attached(sigillum, clientId); return act(sigillum, action, this.operations) }))
     mcp.registerTool('orbis_logs', { inputSchema: { ...sigillumField, since: z.string().optional() } }, guarded('read', ({ sigillum, since }, clientId) => { attached(sigillum, clientId); return logs(sigillum, since, this.audit) }))
-    for (const name of ['orbis_search', 'orbis_toMemoria', 'orbis_reveal']) {
-      mcp.registerTool(name, { inputSchema: sigillumField }, guarded('search', ({ sigillum }, clientId) => {
-        attached(sigillum, clientId)
-        return { sigillum, status: 'not_implemented', phase: 'P6' }
-      }))
-    }
+    mcp.registerTool('orbis_search', { inputSchema: { ...sigillumField, query: z.string().min(1).max(2048), engine: z.literal('google').optional(), depth: z.number().int().positive().optional(), maxPages: z.number().int().positive().optional() } }, guarded('search', async (args, clientId) => {
+      attached(args.sigillum, clientId)
+      const output = await search(args, this.operations)
+      for (const sigillum of explorationSigilla(output)) {
+        if (!this.seals.attach(sigillum, clientId)) throw new Error('Unable to attach an exploration page to this client.')
+      }
+      return output
+    }))
+    mcp.registerTool('orbis_toMemoria', { inputSchema: { ...sigillumField, kind: z.enum(['note', 'task']), selection: z.string().max(8192).optional(), summary: z.string().max(8192).optional() } }, guarded('toMemoria', (args, clientId) => {
+      attached(args.sigillum, clientId)
+      return toMemoria(args.sigillum, args.kind, args.selection, args.summary, this.operations)
+    }))
+    mcp.registerTool('orbis_reveal', { inputSchema: { ...sigillumField, userUtteranceId: z.string().min(1).max(256) } }, guarded('reveal', (args, clientId) => {
+      attached(args.sigillum, clientId)
+      return reveal(args.sigillum, args.userUtteranceId, this.operations)
+    }))
   }
 
   private recordAudit(sigillum: string, actor: string, kind: string, payload: unknown): void {
@@ -133,7 +160,7 @@ export class VinculumServer {
   }
 
   private authorized(request: IncomingMessage): boolean {
-    // TODO(P6): Excubitor service_detail で接続元プロセスが Concordia であることを照合してから strict binding を有効化する。
+    // Process-level proof is advisory until Concordia publishes its service_detail contract.
     return isLoopback(request.socket.remoteAddress) && hasValidToken(bearerToken(request.headers.authorization), this.token)
   }
 

@@ -51,7 +51,7 @@ export interface FenestraViewState {
   opacity: number
 }
 export interface GraphNodeView { id: string; url: string; title: string; lastVisit: string; umbra?: boolean }
-export interface GraphEdgeView { from: string; to: string; kind: 'navigate' | 'newview' | 'llm'; count: number; lastAt: string }
+export interface GraphEdgeView { from: string; to: string; kind: 'navigate' | 'newview' | 'llm' | 'explore'; count: number; lastAt: string }
 /** @implements SPEC-ORBIS-P5-SIGILLUM */
 export interface SigillumViewState { browser: string | null; page: string | null }
 export interface GraphViewState { nodes: GraphNodeView[]; edges: GraphEdgeView[]; activePageId: string | null }

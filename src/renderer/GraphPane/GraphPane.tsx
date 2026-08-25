@@ -46,7 +46,8 @@ export function GraphPane({ state, hits, layout, collapsed, top, onSelect, onTog
         { selector: 'edge', style: { width: 'mapData(count, 1, 5, 1, 5)', 'line-color': '#607d9c', 'target-arrow-color': '#607d9c', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier' } },
         { selector: 'edge[kind = "newview"]', style: { 'line-style': 'dashed' } },
         { selector: 'node.umbra', style: { opacity: 0.35 } },
-        { selector: 'edge[kind = "llm"]', style: { 'line-style': 'dotted', 'line-color': '#9c6bd8', 'target-arrow-color': '#9c6bd8' } }
+        { selector: 'edge[kind = "llm"]', style: { 'line-style': 'dotted', 'line-color': '#9c6bd8', 'target-arrow-color': '#9c6bd8' } },
+        { selector: 'edge[kind = "explore"]', style: { 'line-style': 'dashed', 'line-color': '#53c7ad', 'target-arrow-color': '#53c7ad', 'line-dash-pattern': [8, 5], 'line-dash-offset': 12 } }
       ]
     })
     graph.on('tap', 'node', (event) => onSelect(event.target.id()))

@@ -22,6 +22,7 @@ import { HabitusService } from '../habitus/service.js'
 import { ComparatioService } from '../comparatio/service.js'
 import { FormaRegistry } from '../forma/registry.js'
 import { amazonForma } from '../forma/sites/amazon/index.js'
+import { googleForma } from '../forma/sites/google/index.js'
 import { registerProductFactsHandler } from '../ipc/handlers/register-product-facts-handler.js'
 import { registerComparatioHandler } from '../ipc/handlers/register-comparatio-handler.js'
 import { habitusPresets } from '../habitus/presets/index.js'
@@ -42,6 +43,7 @@ import { registerSigillumHandler } from '../ipc/handlers/register-sigillum-handl
 import { selectRotaCura, selectRotaPage } from '../rota/actions.js'
 import { buildRotaSnapshot } from '../rota/snapshot.js'
 import { filterRotaSnapshot } from '../rota/search.js'
+import { auditPageEvents } from '../vinculum/page-audit.js'
 
 /** @implements SPEC-ORBIS-P0-RADIX SPEC-ORBIS-P3-CLAVIS SPEC-ORBIS-P3-GESTUS SPEC-ORBIS-P3-SETTINGS SPEC-ORBIS-P4-ROTA SPEC-ORBIS-P4-OVERLAY */
 export async function bootstrap(): Promise<void> {
@@ -108,13 +110,14 @@ export async function bootstrap(): Promise<void> {
     onWebContentsCreated: (window, webContents) => {
       registerLocalShortcuts(webContents, (id) => run(id, window), () => bindingStore.keyBindings())
     },
+    onPageCreated: (curaId, pageId, webContents) => auditPageEvents(webContents, sigillumService.forPage(curaId, pageId), auditLog),
     onCuraClosed: (curaId) => {
       sigillumService.revokeBrowserSigilla(curaId)
       browserSigilla.delete(curaId)
     },
     onRevealUmbra: (curaId, pageId) => auditLog.record(sigillumService.forPage(curaId, pageId), 'user', 'reveal', { pageId }),
     onPageClosed: (curaId, pageId) => sigillumService.revokePage(curaId, pageId)
-  }, graphStore, habitusService, comparatioService, new FormaRegistry([amazonForma]))
+  }, graphStore, habitusService, comparatioService, new FormaRegistry([amazonForma, googleForma]))
 
   const resolveWindow = (senderId: number): BrowserWindow | undefined => factory.resolveUiWindow(senderId)
   const resolveAnyWindow = (senderId: number): BrowserWindow | undefined => factory.resolveWindow(senderId)
