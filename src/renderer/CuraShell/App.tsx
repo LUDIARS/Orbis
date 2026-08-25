@@ -8,9 +8,10 @@ import { HabitusSwitcher } from '../HabitusSwitcher/HabitusSwitcher'
 import { ComparatioPanel } from '../Comparatio/ComparatioPanel'
 import { GestureOverlay } from '../GestureOverlay/GestureOverlay'
 import { SettingsPane } from '../Settings/SettingsPane'
+import { StartScreen } from '../Start/StartScreen'
 import styles from './App.module.css'
 
-/** @implements SPEC-ORBIS-P0-RENDERER SPEC-ORBIS-P3-OVERLAY SPEC-ORBIS-P3-SETTINGS */
+/** @implements SPEC-ORBIS-P0-RENDERER SPEC-ORBIS-P3-OVERLAY SPEC-ORBIS-P3-SETTINGS SPEC-ORBIS-P7-START-SCREEN */
 export function App(): ReactElement {
   const [pages, setPages] = useState<PageViewState[]>([])
   const [activePageId, setActivePageId] = useState<string | null>(null)
@@ -91,6 +92,9 @@ export function App(): ReactElement {
       <span className={styles.status} role={navigationError ? 'alert' : undefined}>
         {navigationError ?? `${fenestra.alwaysOnTop ? '📌 top ' : ''}${Math.round(fenestra.opacity * 100)}%`}
       </span>
+      {!activePageId && (
+        <StartScreen top={contentTop} onSubmit={(input, mode) => window.orbis.navigate(input, mode)} />
+      )}
       <GestureOverlay state={gesture} />
       <SettingsPane open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </main>

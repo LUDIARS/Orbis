@@ -45,7 +45,7 @@ import { buildRotaSnapshot } from '../rota/snapshot.js'
 import { filterRotaSnapshot } from '../rota/search.js'
 import { auditPageEvents } from '../vinculum/page-audit.js'
 
-/** @implements SPEC-ORBIS-P0-RADIX SPEC-ORBIS-P3-CLAVIS SPEC-ORBIS-P3-GESTUS SPEC-ORBIS-P3-SETTINGS SPEC-ORBIS-P4-ROTA SPEC-ORBIS-P4-OVERLAY */
+/** @implements SPEC-ORBIS-P0-RADIX SPEC-ORBIS-P3-CLAVIS SPEC-ORBIS-P3-GESTUS SPEC-ORBIS-P3-SETTINGS SPEC-ORBIS-P4-ROTA SPEC-ORBIS-P4-OVERLAY SPEC-ORBIS-P7-START-SCREEN */
 export async function bootstrap(): Promise<void> {
   if (!app.requestSingleInstanceLock()) {
     app.quit()
@@ -128,7 +128,7 @@ export async function bootstrap(): Promise<void> {
   const gestus = new GestusService(bindingStore, run)
   const disposeIpc = [
     registerActionHandler(resolveWindow, run),
-    registerNavigateHandler(resolveWindow, (window, url) => factory.navigate(window, url)),
+    registerNavigateHandler(resolveWindow, (window, input, mode) => factory.navigate(window, input, mode)),
     registerSelectPageHandler(resolveWindow, (window, pageId) => factory.selectPage(window, pageId)),
     registerReadyHandler(resolveWindow, (window) => factory.publishState(window)),
     registerSearchHandler(resolveWindow, (window, query) => factory.search(window, query)),

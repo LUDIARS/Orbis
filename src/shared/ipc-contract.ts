@@ -1,3 +1,4 @@
+import type { NavigationMode } from './navigation-intent.js'
 import type { ActionId } from './action-id.js'
 
 /** @implements SPEC-ORBIS-P0-IPC */
@@ -111,7 +112,7 @@ export interface RendererEventMap {
 export type RendererEventName = keyof RendererEventMap
 
 export interface OrbisBridge {
-  navigate(url: string): void
+  navigate(input: string, mode?: NavigationMode): void
   action(id: ActionId): void
   selectPage(id: string): void
   search(query: string): void

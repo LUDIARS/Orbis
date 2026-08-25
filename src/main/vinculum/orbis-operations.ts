@@ -4,6 +4,7 @@ import { isAllowedExplorationUrl } from '../cura/navigation-url.js'
 import { googleForma } from '../forma/sites/google/index.js'
 import { googleResultLinks } from '../forma/sites/google/result-links.js'
 import { googleSearchResultSelector } from '../forma/sites/google/selectors.js'
+import { googleSearchUrl } from '../forma/sites/google/search-url.js'
 import type { SigillumService } from '../sigillum/service.js'
 import type { PageRepository } from '../tabularium/repositories/page-repo.js'
 import { captureScreenshotPng, performAct, readAccessibilityTree, readOuterHtml } from './cdp.js'
@@ -24,7 +25,7 @@ function bounded(value: number | undefined, fallback: number, upper: number): nu
 /** @implements SPEC-ORBIS-P6-EXPLORATIO Build the only search-engine URL supported by the registered Forma. */
 function searchUrl(query: string, engine?: 'google'): string {
   if (engine && engine !== 'google') throw new Error('Unsupported search engine.')
-  return `https://www.google.com/search?q=${encodeURIComponent(query)}`
+  return googleSearchUrl(query)
 }
 
 /** @implements SPEC-ORBIS-P6-EXPLORATIO Read Google results and validate the renderer boundary in Forma. */

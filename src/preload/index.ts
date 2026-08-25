@@ -18,9 +18,9 @@ const rendererEvents = new Set<RendererEventName>([
   channels.rotaSnapshot
 ])
 
-/** @implements SPEC-ORBIS-P0-IPC */
+/** @implements SPEC-ORBIS-P0-IPC SPEC-ORBIS-P7-START-SCREEN */
 const bridge: OrbisBridge = {
-  navigate: (url) => ipcRenderer.send(channels.navigate, url),
+  navigate: (input, mode) => ipcRenderer.send(channels.navigate, { input, mode: mode ?? 'auto' }),
   action: (id) => ipcRenderer.send(channels.action, id),
   selectPage: (id) => ipcRenderer.send(channels.selectPage, id),
   search: (query) => ipcRenderer.send(channels.search, query),

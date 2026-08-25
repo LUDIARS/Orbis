@@ -17,6 +17,8 @@ import { ComparatioService } from '../comparatio/service.js'
 import { FormaRegistry } from '../forma/registry.js'
 import { injectForma } from '../forma/injector.js'
 import { selectUmbraEvictions } from '../umbra/service.js'
+import { googleSearchUrl } from '../forma/sites/google/search-url.js'
+import { resolveNavigationTarget, type NavigationMode } from '../../shared/navigation-intent.js'
 import {
   isAllowedExplorationUrl,
   isAllowedNavigationUrl,
@@ -26,7 +28,6 @@ import {
 
 const GRAPH_PANE_WIDTH = 300
 const SETTINGS_PANE_WIDTH = 420
-const DEFAULT_URL = 'https://example.com'
 
 interface CuraPage {
   page: Page
@@ -50,6 +51,8 @@ interface CuraWindow {
   graphPaneCollapsed: boolean
   comparatioOpen: boolean
   settingsPaneOpen: boolean
+  /** スタート画面から開くページの親 (グラフのエッジ元)。 スタート画面を出していない間は null。 */
+  startParentPageId: string | null
 }
 
 export interface CuraWindowFactoryHooks {
@@ -92,7 +95,7 @@ export class CuraWindowFactory implements CuraController {
         sandbox: true
       }
     })
-    const entry: CuraWindow = { cura, window, pages: [], activeViewId: null, graphPaneCollapsed: false, comparatioOpen: cura.habitusId === 'shopping', settingsPaneOpen: false }
+    const entry: CuraWindow = { cura, window, pages: [], activeViewId: null, graphPaneCollapsed: false, comparatioOpen: cura.habitusId === 'shopping', settingsPaneOpen: false, startParentPageId: null }
     this.graphStore.restore(cura.id, this.pageRepository.graphByCura(cura.id))
     this.windows.set(window.id, entry)
     this.hooks.onWebContentsCreated(window, window.webContents)
@@ -126,7 +129,7 @@ export class CuraWindowFactory implements CuraController {
       for (const page of restore.filter((candidate) => !candidate.umbra)) this.createPage(entry, page.url, null, 'navigate', page, false)
       const restoredPage = entry.pages[0]
       if (restoredPage) this.activatePage(entry, restoredPage)
-      else this.createPage(entry, DEFAULT_URL)
+      else this.sendPages(entry)
     })
     window.on('resize', () => this.layoutView(entry))
     window.on('closed', () => {
@@ -158,19 +161,26 @@ export class CuraWindowFactory implements CuraController {
     this.sendComparatio(entry)
   }
 
-  navigate(window: BrowserWindow, value: string): void {
+  /** @implements SPEC-ORBIS-P7-START-SCREEN 入力欄の 1 行を URL か検索語として解決してから開く。 */
+  navigate(window: BrowserWindow, value: string, mode: NavigationMode = 'auto'): void {
     const entry = this.entryOf(window)
     if (!entry) return
+    const target = resolveNavigationTarget(value, mode)
+    if (!target) return
     let url: string
     try {
-      url = normalizeNavigationUrl(value)
+      const destination = target.kind === 'search' ? googleSearchUrl(target.value) : target.value
+      url = normalizeNavigationUrl(destination)
     } catch (error) {
       this.reportNavigationError(entry, error instanceof Error ? error.message : 'The URL is invalid.')
       return
     }
     const active = this.activePage(entry)
     if (!active) {
-      this.createPage(entry, url)
+      // スタート画面からの入力。 親ページが分かっていればグラフのエッジを残す。
+      const parent = entry.startParentPageId
+      entry.startParentPageId = null
+      this.createPage(entry, url, parent, parent ? navigationKindForNewView() : 'navigate')
       return
     }
     void active.view.webContents.loadURL(url).catch(() => {
@@ -285,9 +295,18 @@ export class CuraWindowFactory implements CuraController {
     if (entry) this.activePage(entry)?.view.webContents.reload()
   }
 
+  /** @implements SPEC-ORBIS-P7-START-SCREEN 新しいページは行き先を聞いてから開く (既定 URL を勝手に開かない)。 */
   newPage(window: BrowserWindow): void {
     const entry = this.entryOf(window)
-    if (entry) this.createPage(entry, DEFAULT_URL, this.activePage(entry)?.page.id ?? null, navigationKindForNewView())
+    if (!entry) return
+    const active = this.activePage(entry)
+    if (active) {
+      entry.startParentPageId = active.page.id
+      entry.window.contentView.removeChildView(active.view)
+    }
+    entry.activeViewId = null
+    this.sendPages(entry)
+    this.sendGraph(entry)
   }
 
   closePage(window: BrowserWindow): void {
@@ -304,7 +323,7 @@ export class CuraWindowFactory implements CuraController {
 
     const next = [...entry.pages].reverse().find((candidate) => !candidate.umbra)
     if (next) this.activatePage(entry, next)
-    else this.createPage(entry, DEFAULT_URL)
+    else this.sendPages(entry)
   }
 
   newCura(): void {
@@ -600,6 +619,7 @@ export class CuraWindowFactory implements CuraController {
     const previous = this.activePage(entry)
     if (previous && previous !== page) entry.window.contentView.removeChildView(previous.view)
     if (previous !== page) entry.window.contentView.addChildView(page.view)
+    entry.startParentPageId = null
     entry.activeViewId = page.view.webContents.id
     this.layoutView(entry)
     page.view.webContents.focus()
