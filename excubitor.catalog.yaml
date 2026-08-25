@@ -1,0 +1,19 @@
+# Excubitor catalog fragment -- Orbis owns this desktop application definition.
+services:
+  - code: orbis
+    name: Orbis (interest graph browser)
+    tier: local-app
+    project_code: Ob
+    component: app
+    repo: LUDIARS/Orbis
+    runtime: node
+    app_kind: electron
+    cwd: ${ARS_ROOT}/Orbis
+    command: npm run dev
+    allow_hot_reload: true
+    autostart: false
+    restart_policy: "no"
+    health:
+      type: process
+      interval_sec: 5
+      grace_period_sec: 20
