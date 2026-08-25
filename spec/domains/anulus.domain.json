@@ -1,0 +1,1 @@
+{"name":"anulus","description":"常設の円形管理ウインドウ、入力と復元位置。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/anulus/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)src/renderer/anulus(?:\\.html|\\.tsx)$"},{"pathPattern":"(^|/)test/anulus-.*\\.test\\.ts$"}]}

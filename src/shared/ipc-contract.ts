@@ -33,7 +33,13 @@ export const channels = {
   rotaSearch: 'orbis:rota-search',
   rotaClose: 'orbis:rota-close',
   rotaReady: 'orbis:rota-ready',
-  sigillum: 'orbis:sigillum'
+  sigillum: 'orbis:sigillum',
+  anulusOpen: 'orbis:anulus-open',
+  anulusNewCura: 'orbis:anulus-new-cura',
+  anulusSelectCura: 'orbis:anulus-select-cura',
+  anulusState: 'orbis:anulus-state',
+  speculumSelect: 'orbis:speculum-select',
+  speculumToggle: 'orbis:speculum-toggle'
 } as const
 
 export interface PageViewState {
@@ -107,9 +113,13 @@ export interface RendererEventMap {
   [channels.comparatio]: ComparatioViewState
   [channels.gestureOverlay]: GestureOverlayState
   [channels.rotaSnapshot]: RotaSnapshot
+  [channels.anulusState]: AnulusViewState
 }
 
 export type RendererEventName = keyof RendererEventMap
+export interface AnulusPageView { id: string; title: string; curaId: string }
+export interface AnulusCuraView { id: string; title: string; color: string; active: boolean }
+export interface AnulusViewState { activeCuraId: string | null; curas: AnulusCuraView[]; pages: AnulusPageView[] }
 
 export interface OrbisBridge {
   navigate(input: string, mode?: NavigationMode): void
@@ -131,6 +141,11 @@ export interface OrbisBridge {
   rotaClose(): void
   rotaReady(): void
   sigillum(): Promise<SigillumViewState>
+  anulusOpen(input: string, mode?: NavigationMode): void
+  anulusNewCura(): void
+  anulusSelectCura(curaId: string): void
+  speculumSelect(pageId: string): void
+  speculumToggle(): void
   ready(): void
   on<K extends RendererEventName>(channel: K, listener: (value: RendererEventMap[K]) => void): () => void
 }

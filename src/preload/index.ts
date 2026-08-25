@@ -22,7 +22,8 @@ const rendererEventAllowlist: Record<RendererEventName, true> = {
   [channels.habitusState]: true,
   [channels.comparatio]: true,
   [channels.gestureOverlay]: true,
-  [channels.rotaSnapshot]: true
+  [channels.rotaSnapshot]: true,
+  [channels.anulusState]: true
 }
 
 const rendererEvents = new Set<RendererEventName>(Object.keys(rendererEventAllowlist) as RendererEventName[])
@@ -48,6 +49,11 @@ const bridge: OrbisBridge = {
   rotaClose: () => ipcRenderer.send(channels.rotaClose),
   rotaReady: () => ipcRenderer.send(channels.rotaReady),
   sigillum: () => ipcRenderer.invoke(channels.sigillum),
+  anulusOpen: (input, mode) => ipcRenderer.send(channels.anulusOpen, { input, mode: mode ?? 'auto' }),
+  anulusNewCura: () => ipcRenderer.send(channels.anulusNewCura),
+  anulusSelectCura: (curaId) => ipcRenderer.send(channels.anulusSelectCura, curaId),
+  speculumSelect: (pageId) => ipcRenderer.send(channels.speculumSelect, pageId),
+  speculumToggle: () => ipcRenderer.send(channels.speculumToggle),
   ready: () => ipcRenderer.send(channels.ready),
   on: <K extends RendererEventName>(channel: K, listener: (value: RendererEventMap[K]) => void): (() => void) => {
     if (!rendererEvents.has(channel)) throw new TypeError(`Unsupported renderer event: ${channel}`)

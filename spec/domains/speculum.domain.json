@@ -1,0 +1,1 @@
+{"name":"speculum","description":"Nexus グラフを常設独立ウインドウで表示する。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/speculum/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)src/renderer/speculum(?:\\.html|\\.tsx)$"}]}

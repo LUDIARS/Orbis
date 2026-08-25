@@ -1,4 +1,4 @@
-import { BrowserWindow, WebContentsView, type WebContents } from 'electron'
+import { WebContentsView, type BrowserWindow, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import type { CuraController } from '../actions/types.js'
@@ -6,10 +6,11 @@ import { applyAlwaysOnTop, applyOpacity, minimizeNonPinned } from '../fenestra/a
 import { channels } from '../ipc/channels.js'
 import type { Cura } from '../tabularium/repositories/cura-repo.js'
 import type { NavigationKind, Page, PageRepository } from '../tabularium/repositories/page-repo.js'
-import { curaLayout, type GraphLayout } from '../../shared/ipc-contract.js'
+import type { GraphLayout } from '../../shared/ipc-contract.js'
 import { GraphStore } from '../nexus/graph-store.js'
 import { navigationKindForNewView, resolveNavigationParent } from '../nexus/navigation-tracker.js'
 import { normalizeGraphUrl } from '../nexus/url-normalizer.js'
+import type { WindowStateRepository } from '../tabularium/repositories/window-state-repo.js'
 import { HabitusService } from '../habitus/service.js'
 import type { HabitusId } from '../habitus/types.js'
 import { applyEmulation } from '../habitus/emulation.js'
@@ -22,16 +23,15 @@ import { resolveNavigationTarget, type NavigationMode } from '../../shared/navig
 import {
   isAllowedExplorationUrl,
   isAllowedNavigationUrl,
-  normalizeDevelopmentRendererUrl,
   normalizeNavigationUrl
 } from './navigation-url.js'
-
-const GRAPH_PANE_WIDTH = 300
-const SETTINGS_PANE_WIDTH = 420
+import { PageWindowFactory } from './page-window.js'
 
 interface CuraPage {
   page: Page
   view: WebContentsView
+  /** P8: a visible page owns its BrowserWindow; Umbra deliberately has none. */
+  window?: BrowserWindow
   hasCommittedNavigation: boolean
   initialFromPageId: string | null
   initialNavigationKind: NavigationKind
@@ -42,10 +42,9 @@ interface CuraPage {
   viewKey: string
 }
 
-/** Cura 1 つ = BrowserWindow 1 つ。各アクティブ page は固有の WebContentsView を持つ。 */
-interface CuraWindow {
+/** A Cura is a logical owner of independently rendered page windows. */
+interface CuraEntry {
   cura: Cura
-  window: BrowserWindow
   pages: CuraPage[]
   activeViewId: number | null
   graphPaneCollapsed: boolean
@@ -57,17 +56,22 @@ interface CuraWindow {
 
 export interface CuraWindowFactoryHooks {
   onNewCura(): void
+  onFocusAnulus(): void
   onCuraChanged(cura: Cura): void
   onWebContentsCreated(window: BrowserWindow, webContents: WebContents): void
   onPageCreated?(curaId: string, pageId: string, webContents: WebContents): void
   onCuraClosed?(curaId: string): void
   onRevealUmbra?(curaId: string, pageId: string): void
   onPageClosed?(curaId: string, pageId: string): void
+  onGraphChanged?(curaId: string, state: import('../../shared/ipc-contract.js').GraphViewState): void
 }
 
-/** @implements SPEC-ORBIS-P0-CURA */
+/** @implements SPEC-ORBIS-P0-CURA SPEC-ORBIS-P8-PAGE-WINDOW */
 export class CuraWindowFactory implements CuraController {
-  private readonly windows = new Map<number, CuraWindow>()
+  private readonly windows = new Map<string, CuraEntry>()
+  private readonly pageWindows: PageWindowFactory
+  private activeCuraId: string | null = null
+  private isQuitting = false
 
   constructor(
     private readonly pageRepository: PageRepository,
@@ -75,81 +79,49 @@ export class CuraWindowFactory implements CuraController {
     private readonly graphStore: GraphStore,
     private readonly habitusService: HabitusService,
     private readonly comparatioService: ComparatioService,
-    private readonly formaRegistry: FormaRegistry
-  ) {}
+    private readonly formaRegistry: FormaRegistry,
+    windowStates?: WindowStateRepository
+  ) {
+    this.pageWindows = new PageWindowFactory(windowStates)
+  }
 
-  create(cura: Cura, restore: Page[] = []): BrowserWindow {
-    const developmentRendererUrl = process.env.ELECTRON_RENDERER_URL
-      ? normalizeDevelopmentRendererUrl(process.env.ELECTRON_RENDERER_URL)
-      : null
-    const window = new BrowserWindow({
-      width: 1280,
-      height: 860,
-      title: cura.title,
-      alwaysOnTop: cura.alwaysOnTop,
-      opacity: cura.opacity,
-      webPreferences: {
-        preload: join(__dirname, '../preload/index.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true
-      }
-    })
-    const entry: CuraWindow = { cura, window, pages: [], activeViewId: null, graphPaneCollapsed: false, comparatioOpen: cura.habitusId === 'shopping', settingsPaneOpen: false, startParentPageId: null }
+  create(cura: Cura, restore: Page[] = []): void {
+    if (this.windows.has(cura.id)) return
+    const entry: CuraEntry = { cura, pages: [], activeViewId: null, graphPaneCollapsed: false, comparatioOpen: cura.habitusId === 'shopping', settingsPaneOpen: false, startParentPageId: null }
+    this.activeCuraId ??= cura.id
     this.graphStore.restore(cura.id, this.pageRepository.graphByCura(cura.id))
-    this.windows.set(window.id, entry)
-    this.hooks.onWebContentsCreated(window, window.webContents)
-
-    window.webContents.on('preload-error', () => {
-      console.error('Unable to load the Cura preload bridge.')
-      if (!window.isDestroyed()) window.destroy()
-    })
-    window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-    window.webContents.on('will-navigate', (details) => details.preventDefault())
-    window.webContents.on('will-redirect', (details) => {
-      try {
-        normalizeDevelopmentRendererUrl(details.url)
-      } catch {
-        details.preventDefault()
-      }
-    })
-    const uiLoad = developmentRendererUrl
-      ? window.loadURL(developmentRendererUrl)
-      : window.loadFile(join(__dirname, '../renderer/index.html'))
-    void uiLoad.catch(() => {
-      console.error('Unable to load the Cura renderer.')
-      if (!window.isDestroyed()) window.destroy()
-    })
-
-    window.webContents.once('did-finish-load', () => {
-      window.webContents.send(channels.fenestraState, {
-        alwaysOnTop: cura.alwaysOnTop,
-        opacity: cura.opacity
-      })
-      for (const page of restore.filter((candidate) => !candidate.umbra)) this.createPage(entry, page.url, null, 'navigate', page, false)
-      const restoredPage = entry.pages[0]
-      if (restoredPage) this.activatePage(entry, restoredPage)
-      else this.sendPages(entry)
-    })
-    window.on('resize', () => this.layoutView(entry))
-    window.on('closed', () => {
-      for (const tab of entry.pages) {
-        if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
-        this.hooks.onPageClosed?.(entry.cura.id, tab.viewKey)
-      }
-      this.hooks.onCuraClosed?.(entry.cura.id)
-      this.windows.delete(window.id)
-    })
-    return window
+    this.windows.set(cura.id, entry)
+    for (const page of restore.filter((candidate) => !candidate.umbra)) {
+      this.createPage(entry, page.url, null, 'navigate', page, false)
+    }
+    entry.activeViewId = entry.pages.find((page) => !page.umbra)?.view.webContents.id ?? null
+    this.publishShellState(entry)
   }
 
   resolveUiWindow(senderId: number): BrowserWindow | undefined {
-    return [...this.windows.values()].find((entry) => entry.window.webContents.id === senderId)?.window
+    for (const entry of this.windows.values()) {
+      const page = entry.pages.find((candidate) => candidate.window?.webContents.id === senderId)
+      if (page?.window) return page.window
+    }
+    return undefined
   }
 
   /** @implements SPEC-ORBIS-P3-GESTUS */
   resolveWindow(senderId: number): BrowserWindow | undefined {
-    return [...this.windows.values()].find((entry) => entry.window.webContents.id === senderId || entry.pages.some((page) => page.view.webContents.id === senderId))?.window
+    for (const entry of this.windows.values()) {
+      const page = entry.pages.find((candidate) => candidate.window?.webContents.id === senderId || candidate.view.webContents.id === senderId)
+      if (page?.window) return page.window
+    }
+    return undefined
+  }
+
+  /** @implements SPEC-ORBIS-P8-PAGE-WINDOW Global actions target the active visible page, even while a shell window has focus. */
+  activePageWindow(): BrowserWindow | undefined {
+    const entry = this.activeCuraId ? this.windows.get(this.activeCuraId) : undefined
+    const window = entry
+      ? (this.activePage(entry) ?? entry.pages.find((page) => !page.umbra))?.window
+      : undefined
+    return window && !window.isDestroyed() ? window : undefined
   }
 
   publishState(window: BrowserWindow): void {
@@ -161,10 +133,38 @@ export class CuraWindowFactory implements CuraController {
     this.sendComparatio(entry)
   }
 
+  /** @implements SPEC-ORBIS-P8-ANULUS Cura is a logical owner, not a hidden BrowserWindow. */
+  activateCura(curaId: string): BrowserWindow | undefined {
+    const entry = this.windows.get(curaId)
+    if (!entry) return undefined
+    this.activeCuraId = curaId
+    entry.cura = { ...entry.cura, lastActiveAt: new Date().toISOString() }
+    this.hooks.onCuraChanged(entry.cura)
+    this.publishShellState(entry)
+    return (this.activePage(entry) ?? entry.pages.find((page) => !page.umbra))?.window
+  }
+
+  prepareToQuit(): void {
+    this.isQuitting = true
+  }
+
+  /** Anulus opens a new view in the selected logical Cura. */
+  openInCura(curaId: string, value: string, mode: NavigationMode = 'auto'): void {
+    const entry = this.windows.get(curaId)
+    if (!entry) return
+    this.activeCuraId = curaId
+    this.navigateEntry(entry, value, mode)
+  }
+
   /** @implements SPEC-ORBIS-P7-START-SCREEN 入力欄の 1 行を URL か検索語として解決してから開く。 */
   navigate(window: BrowserWindow, value: string, mode: NavigationMode = 'auto'): void {
     const entry = this.entryOf(window)
     if (!entry) return
+    const active = this.pageForWindow(entry, window) ?? this.activePage(entry)
+    this.navigateEntry(entry, value, mode, active)
+  }
+
+  private navigateEntry(entry: CuraEntry, value: string, mode: NavigationMode, active?: CuraPage): void {
     const target = resolveNavigationTarget(value, mode)
     if (!target) return
     let url: string
@@ -175,7 +175,6 @@ export class CuraWindowFactory implements CuraController {
       this.reportNavigationError(entry, error instanceof Error ? error.message : 'The URL is invalid.')
       return
     }
-    const active = this.activePage(entry)
     if (!active) {
       // スタート画面からの入力。 親ページが分かっていればグラフのエッジを残す。
       const parent = entry.startParentPageId
@@ -207,20 +206,71 @@ export class CuraWindowFactory implements CuraController {
     }
   }
 
+  /** Speculum は sender に Cura UI を持たないため、ページ ID から論理的な親 Cura を解決する。 */
+  selectPageById(pageId: string): BrowserWindow | undefined {
+    const found = this.findTab(pageId)
+    if (found) {
+      this.activeCuraId = found.entry.cura.id
+      if (found.tab.umbra) this.revealUmbra(found.entry, found.tab)
+      else this.activatePage(found.entry, found.tab)
+      found.tab.window?.show()
+      found.tab.window?.focus()
+      return found.tab.window
+    }
+    for (const entry of this.windows.values()) {
+      const stored = this.pageRepository.listByCura(entry.cura.id).find((page) => page.id === pageId)
+      if (!stored) continue
+      this.activeCuraId = entry.cura.id
+      if (stored.umbra) {
+        const revealed = this.createPage(entry, stored.url, null, 'navigate', { ...stored, umbra: false })
+        if (revealed) this.hooks.onRevealUmbra?.(entry.cura.id, revealed.viewKey)
+        return revealed?.window
+      }
+      return undefined
+    }
+    return undefined
+  }
+
+  graphSnapshot(curaId: string): import('../../shared/ipc-contract.js').GraphViewState {
+    return this.graphStore.snapshot(curaId, null)
+  }
+
+  currentCuraId(): string | null {
+    return this.activeCuraId
+  }
+
+  anulusSnapshot(): import('../../shared/ipc-contract.js').AnulusViewState {
+    const active = this.activeCuraId ? this.windows.get(this.activeCuraId) : undefined
+    return {
+      activeCuraId: active?.cura.id ?? null,
+      curas: [...this.windows.values()].map((entry) => ({
+        id: entry.cura.id,
+        title: entry.cura.title,
+        color: entry.cura.color,
+        active: entry.cura.id === active?.cura.id
+      })),
+      pages: active?.pages
+        .filter((page) => !page.umbra)
+        .map((page) => ({ id: page.page.id, title: page.page.title, curaId: active.cura.id }))
+        ?? []
+    }
+  }
+
   /** @implements SPEC-ORBIS-P5-UMBRA */
-  private revealUmbra(entry: CuraWindow, tab: CuraPage, recordUserAction = true): void {
+  private revealUmbra(entry: CuraEntry, tab: CuraPage, recordUserAction = true): void {
     tab.umbra = false
     tab.page = { ...tab.page, umbra: false }
     this.pageRepository.save(tab.page)
     this.updateGraph(entry, tab.page, null, 'navigate')
+    this.attachPageWindow(entry, tab)
     this.activatePage(entry, tab)
     if (recordUserAction) this.hooks.onRevealUmbra?.(entry.cura.id, tab.viewKey)
   }
 
   search(window: BrowserWindow, query: string): string[] { const entry = this.entryOf(window); return entry ? this.pageRepository.search(entry.cura.id, query) : [] }
-  setGraphPane(window: BrowserWindow, collapsed: boolean, _layout?: GraphLayout): void { const entry = this.entryOf(window); if (!entry) return; entry.graphPaneCollapsed = collapsed; this.layoutView(entry) }
+  setGraphPane(window: BrowserWindow, collapsed: boolean, _layout?: GraphLayout): void { const entry = this.entryOf(window); if (entry) entry.graphPaneCollapsed = collapsed }
   /** @implements SPEC-ORBIS-P3-SETTINGS */
-  setSettingsPaneOpen(window: BrowserWindow, open: boolean): void { const entry = this.entryOf(window); if (!entry) return; entry.settingsPaneOpen = open; this.layoutView(entry) }
+  setSettingsPaneOpen(window: BrowserWindow, open: boolean): void { const entry = this.entryOf(window); if (entry) entry.settingsPaneOpen = open }
   focusSearch(window: BrowserWindow): void { window.webContents.send(channels.focusSearch) }
   toggleGraphLayout(window: BrowserWindow): void { window.webContents.send(channels.toggleGraphLayout) }
   savePageContent(senderId: number, content: string): void { for (const entry of this.windows.values()) { const tab = entry.pages.find((item) => item.view.webContents.id === senderId); if (tab) { this.pageRepository.saveContent(tab.page, content); return } } }
@@ -257,7 +307,6 @@ export class CuraWindowFactory implements CuraController {
       }
       this.recreatePageForPartition(entry, tab, resolvedHabitusId)
     }
-    this.layoutView(entry)
     this.sendHabitus(entry)
     this.sendComparatio(entry)
   }
@@ -274,56 +323,41 @@ export class CuraWindowFactory implements CuraController {
     const entry = this.entryOf(window)
     if (!entry) return
     entry.comparatioOpen = !entry.comparatioOpen
-    this.layoutView(entry)
     this.sendComparatio(entry)
   }
 
   goBack(window: BrowserWindow): void {
     const entry = this.entryOf(window)
-    const history = entry && this.activePage(entry)?.view.webContents.navigationHistory
+    const history = entry && (this.pageForWindow(entry, window) ?? this.activePage(entry))?.view.webContents.navigationHistory
     if (history?.canGoBack()) history.goBack()
   }
 
   goForward(window: BrowserWindow): void {
     const entry = this.entryOf(window)
-    const history = entry && this.activePage(entry)?.view.webContents.navigationHistory
+    const history = entry && (this.pageForWindow(entry, window) ?? this.activePage(entry))?.view.webContents.navigationHistory
     if (history?.canGoForward()) history.goForward()
   }
 
   reload(window: BrowserWindow): void {
     const entry = this.entryOf(window)
-    if (entry) this.activePage(entry)?.view.webContents.reload()
+    if (entry) (this.pageForWindow(entry, window) ?? this.activePage(entry))?.view.webContents.reload()
   }
 
   /** @implements SPEC-ORBIS-P7-START-SCREEN 新しいページは行き先を聞いてから開く (既定 URL を勝手に開かない)。 */
   newPage(window: BrowserWindow): void {
     const entry = this.entryOf(window)
     if (!entry) return
-    const active = this.activePage(entry)
-    if (active) {
-      entry.startParentPageId = active.page.id
-      entry.window.contentView.removeChildView(active.view)
-    }
-    entry.activeViewId = null
-    this.sendPages(entry)
-    this.sendGraph(entry)
+    const active = this.pageForWindow(entry, window) ?? this.activePage(entry)
+    if (active) entry.startParentPageId = active.page.id
+    this.hooks.onFocusAnulus()
   }
 
   closePage(window: BrowserWindow): void {
     const entry = this.entryOf(window)
-    const active = entry && this.activePage(entry)
+    const active = entry && (this.pageForWindow(entry, window) ?? this.activePage(entry))
     if (!entry || !active) return
 
-    entry.window.contentView.removeChildView(active.view)
-    this.pageRepository.deactivate(active.page.id)
-    if (!active.view.webContents.isDestroyed()) active.view.webContents.close()
-    this.hooks.onPageClosed?.(entry.cura.id, active.viewKey)
-    entry.pages = entry.pages.filter((candidate) => candidate !== active)
-    entry.activeViewId = null
-
-    const next = [...entry.pages].reverse().find((candidate) => !candidate.umbra)
-    if (next) this.activatePage(entry, next)
-    else this.sendPages(entry)
+    active.window?.close()
   }
 
   newCura(): void {
@@ -345,12 +379,7 @@ export class CuraWindowFactory implements CuraController {
   }
 
   minimizeOthers(): void {
-    minimizeNonPinned([...this.windows.values()].map((entry) => entry.window))
-  }
-
-  /** @implements SPEC-ORBIS-P4-OVERLAY */
-  windowForCura(curaId: string): BrowserWindow | undefined {
-    return [...this.windows.values()].find((entry) => entry.cura.id === curaId)?.window
+    minimizeNonPinned([...this.windows.values()].flatMap((entry) => entry.pages.flatMap((page) => page.window ? [page.window] : [])))
   }
 
   /** @implements SPEC-ORBIS-P5-VINCULUM LLM が開く新規ページ。既定は Umbra (非描画)。 */
@@ -408,11 +437,11 @@ export class CuraWindowFactory implements CuraController {
   /** @implements SPEC-ORBIS-P5-SIGILLUM アドレスバーのスタンプ表示用。 */
   activePageInfo(window: BrowserWindow): { curaId: string; pageId: string } | null {
     const entry = this.entryOf(window)
-    const active = entry && this.activePage(entry)
+    const active = entry && (this.pageForWindow(entry, window) ?? this.activePage(entry))
     return entry && active ? { curaId: entry.cura.id, pageId: active.viewKey } : null
   }
 
-  private findTab(pageId: string): { entry: CuraWindow; tab: CuraPage } | undefined {
+  private findTab(pageId: string): { entry: CuraEntry; tab: CuraPage } | undefined {
     for (const entry of this.windows.values()) {
       const tab = entry.pages.find((candidate) => candidate.page.id === pageId || candidate.viewKey === pageId)
       if (tab) return { entry, tab }
@@ -420,26 +449,37 @@ export class CuraWindowFactory implements CuraController {
     return undefined
   }
 
-  private entryOf(window: BrowserWindow): CuraWindow | undefined {
-    return this.windows.get(window.id)
+  /** @implements SPEC-ORBIS-P8-PAGE-WINDOW UI ウインドウを論理 Cura へ逆引きする。 */
+  private entryOf(window: BrowserWindow): CuraEntry | undefined {
+    return [...this.windows.values()].find((entry) => entry.pages.some((page) => page.window?.id === window.id))
   }
 
-  private activePage(entry: CuraWindow): CuraPage | undefined {
+  /** @implements SPEC-ORBIS-P8-PAGE-WINDOW UI 操作の対象ページをウインドウ ID で確定する。 */
+  private pageForWindow(entry: CuraEntry, window: BrowserWindow): CuraPage | undefined {
+    return entry.pages.find((page) => page.window?.id === window.id)
+  }
+
+  private activePage(entry: CuraEntry): CuraPage | undefined {
     return entry.pages.find((page) => page.view.webContents.id === entry.activeViewId)
   }
 
-  private fenestraState(entry: CuraWindow): { alwaysOnTop: boolean; opacity: number } {
+  private fenestraState(entry: CuraEntry): { alwaysOnTop: boolean; opacity: number } {
     return { alwaysOnTop: entry.cura.alwaysOnTop, opacity: entry.cura.opacity }
   }
 
-  private persistFenestra(entry: CuraWindow, alwaysOnTop: boolean, opacity: number): void {
+  private persistFenestra(entry: CuraEntry, alwaysOnTop: boolean, opacity: number): void {
     entry.cura = { ...entry.cura, alwaysOnTop, opacity }
     this.hooks.onCuraChanged(entry.cura)
-    entry.window.webContents.send(channels.fenestraState, { alwaysOnTop, opacity })
+    for (const tab of entry.pages) {
+      if (!tab.window || tab.window.isDestroyed()) continue
+      tab.window.setAlwaysOnTop(alwaysOnTop)
+      tab.window.setOpacity(opacity)
+      tab.window.webContents.send(channels.fenestraState, { alwaysOnTop, opacity })
+    }
   }
 
   private createPage(
-    entry: CuraWindow,
+    entry: CuraEntry,
     value: string,
     fromPageId: string | null = null,
     navigationKind: NavigationKind = 'navigate',
@@ -505,7 +545,6 @@ export class CuraWindowFactory implements CuraController {
     this.hooks.onPageCreated?.(entry.cura.id, tab.viewKey, view.webContents)
     if (preset.userAgent) view.webContents.setUserAgent(preset.userAgent)
     void applyEmulation(view.webContents, preset).catch((error: unknown) => console.error('Unable to apply initial Habitus emulation.', error))
-    this.hooks.onWebContentsCreated(entry.window, view.webContents)
 
     view.webContents.on('will-navigate', (details) => this.guardNavigation(entry, details, details.url, tab))
     view.webContents.on('will-redirect', (details) => this.guardNavigation(entry, details, details.url, tab))
@@ -526,6 +565,7 @@ export class CuraWindowFactory implements CuraController {
       const updatedPage = { ...tab.page, title }
       this.pageRepository.save(updatedPage)
       tab.page = updatedPage
+      tab.window?.setTitle(title)
       this.updateGraph(entry, updatedPage, null, 'navigate')
       this.sendPages(entry)
       this.sendGraph(entry)
@@ -534,6 +574,7 @@ export class CuraWindowFactory implements CuraController {
       void injectForma(view.webContents, this.formaRegistry, tab.habitusId).catch((error: unknown) => console.error('Unable to apply Forma.', error))
     })
 
+    if (!umbra) this.attachPageWindow(entry, tab)
     if (activate && !umbra) this.activatePage(entry, tab)
     else this.sendPages(entry)
     if (umbra) this.enforceUmbraCap(entry)
@@ -543,8 +584,49 @@ export class CuraWindowFactory implements CuraController {
     return tab
   }
 
+  /** @implements SPEC-ORBIS-P8-PAGE-WINDOW Creates the control-bar host only when a page becomes visible. */
+  private attachPageWindow(entry: CuraEntry, tab: CuraPage): void {
+    if (tab.window && !tab.window.isDestroyed()) return
+    let window: BrowserWindow
+    window = this.pageWindows.create({
+      ownerId: () => tab.page.id,
+      title: tab.page.title,
+      view: tab.view,
+      alwaysOnTop: entry.cura.alwaysOnTop,
+      opacity: entry.cura.opacity,
+      onWebContentsCreated: (pageWindow, webContents) => this.hooks.onWebContentsCreated(pageWindow, webContents),
+      onFocus: () => {
+        this.activeCuraId = entry.cura.id
+        entry.activeViewId = tab.view.webContents.id
+        this.publishShellState(entry)
+      },
+      onClosed: (rendererFailed) => {
+        if (tab.window !== window) return
+        tab.window = undefined
+        const wasActive = entry.activeViewId === tab.view.webContents.id
+        if (!this.isQuitting && !rendererFailed) this.pageRepository.deactivate(tab.page.id)
+        if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
+        entry.pages = entry.pages.filter((candidate) => candidate !== tab)
+        this.hooks.onPageClosed?.(entry.cura.id, tab.viewKey)
+        if (wasActive) {
+          entry.activeViewId = null
+          const next = [...entry.pages].reverse().find((candidate) => !candidate.umbra)
+          if (next && !this.isQuitting) this.activatePage(entry, next)
+        }
+        if (!this.isQuitting) this.publishShellState(entry)
+      },
+      onRendererReady: (pageWindow) => this.publishState(pageWindow)
+    })
+    tab.window = window
+  }
+
+  private publishShellState(entry: CuraEntry): void {
+    const state = this.graphStore.snapshot(entry.cura.id, this.activePage(entry)?.page.id ?? null)
+    this.hooks.onGraphChanged?.(entry.cura.id, state)
+  }
+
   /** @implements SPEC-ORBIS-P5-UMBRA 上限超過の Umbra view を古い順に閉じる。page 行と Nexus ノードは残す。 */
-  private enforceUmbraCap(entry: CuraWindow): void {
+  private enforceUmbraCap(entry: CuraEntry): void {
     const evicted = selectUmbraEvictions(entry.pages.filter((tab) => tab.umbra).map((tab) => ({ pageId: tab.page.id, lastVisit: tab.page.lastVisit })))
     if (evicted.length === 0) return
     for (const pageId of evicted) {
@@ -555,7 +637,7 @@ export class CuraWindowFactory implements CuraController {
     }
   }
 
-  private commitNavigation(entry: CuraWindow, tab: CuraPage, nextUrl: string): void {
+  private commitNavigation(entry: CuraEntry, tab: CuraPage, nextUrl: string): void {
     if (!isAllowedNavigationUrl(nextUrl)) return
     const now = new Date().toISOString()
     const normalizedUrl = normalizeGraphUrl(nextUrl)
@@ -615,42 +697,51 @@ export class CuraWindowFactory implements CuraController {
     this.sendGraph(entry)
   }
 
-  private activatePage(entry: CuraWindow, page: CuraPage): void {
-    const previous = this.activePage(entry)
-    if (previous && previous !== page) entry.window.contentView.removeChildView(previous.view)
-    if (previous !== page) entry.window.contentView.addChildView(page.view)
+  private activatePage(entry: CuraEntry, page: CuraPage): void {
     entry.startParentPageId = null
+    this.activeCuraId = entry.cura.id
     entry.activeViewId = page.view.webContents.id
-    this.layoutView(entry)
+    if (page.window?.isMinimized()) page.window.restore()
+    page.window?.show()
+    page.window?.focus()
     page.view.webContents.focus()
     this.sendPages(entry)
     this.sendGraph(entry)
   }
 
-  private sendPages(entry: CuraWindow): void {
-    if (entry.window.isDestroyed() || entry.window.webContents.isDestroyed()) return
-    entry.window.webContents.send(channels.pages, {
+  private sendPages(entry: CuraEntry): void {
+    const state = {
       pages: entry.pages.filter((tab) => !tab.umbra).map(({ page }) => ({ id: page.id, title: page.title, url: page.url })),
       activePageId: this.activePage(entry)?.page.id ?? null
-    })
+    }
+    for (const tab of entry.pages) {
+      if (tab.window && !tab.window.webContents.isDestroyed()) {
+        tab.window.webContents.send(channels.pages, { ...state, activePageId: tab.page.id })
+      }
+    }
+    this.publishShellState(entry)
   }
 
-  private sendGraph(entry: CuraWindow): void {
-    if (entry.window.isDestroyed() || entry.window.webContents.isDestroyed()) return
-    entry.window.webContents.send(channels.graph, this.graphStore.snapshot(entry.cura.id, this.activePage(entry)?.page.id ?? null))
+  private sendGraph(entry: CuraEntry): void {
+    const state = this.graphStore.snapshot(entry.cura.id, this.activePage(entry)?.page.id ?? null)
+    this.publishShellState(entry)
+    for (const tab of entry.pages) if (tab.window && !tab.window.webContents.isDestroyed()) tab.window.webContents.send(channels.graph, state)
   }
 
-  private sendHabitus(entry: CuraWindow): void {
-    if (!entry.window.webContents.isDestroyed()) entry.window.webContents.send(channels.habitusState, { id: this.habitusService.getCuraDefault(entry.cura) })
+  private sendHabitus(entry: CuraEntry): void {
+    for (const tab of entry.pages) if (tab.window && !tab.window.webContents.isDestroyed()) tab.window.webContents.send(channels.habitusState, { id: this.habitusService.getCuraDefault(entry.cura) })
   }
 
-  private sendComparatio(entry: CuraWindow): void {
-    if (!entry.window.webContents.isDestroyed()) entry.window.webContents.send(channels.comparatio, { open: entry.comparatioOpen, products: this.comparatioService.list(entry.cura.id) })
+  private sendComparatio(entry: CuraEntry): void {
+    for (const tab of entry.pages) if (tab.window && !tab.window.webContents.isDestroyed()) tab.window.webContents.send(channels.comparatio, { open: entry.comparatioOpen, products: this.comparatioService.list(entry.cura.id) })
   }
 
-  private recreatePageForPartition(entry: CuraWindow, tab: CuraPage, habitusId: HabitusId): void {
+  private recreatePageForPartition(entry: CuraEntry, tab: CuraPage, habitusId: HabitusId): void {
     const wasActive = this.activePage(entry) === tab
-    entry.window.contentView.removeChildView(tab.view)
+    const previousWindow = tab.window
+    previousWindow?.contentView.removeChildView(tab.view)
+    tab.window = undefined
+    previousWindow?.destroy()
     if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
     this.hooks.onPageClosed?.(entry.cura.id, tab.viewKey)
     entry.pages = entry.pages.filter((candidate) => candidate !== tab)
@@ -672,19 +763,17 @@ export class CuraWindowFactory implements CuraController {
     void applyEmulation(tab.view.webContents, preset).then(() => tab.view.webContents.reload()).catch((error: unknown) => console.error('Unable to apply Habitus emulation.', error))
   }
 
-  private updateGraph(entry: CuraWindow, page: Page, fromPageId: string | null, kind: NavigationKind): void {
+  private updateGraph(entry: CuraEntry, page: Page, fromPageId: string | null, kind: NavigationKind): void {
     this.graphStore.addNode(entry.cura.id, { id: page.id, url: page.url, title: page.title, lastVisit: page.lastVisit, umbra: page.umbra })
     if (!fromPageId) return
     this.graphStore.addEdge(entry.cura.id, { from: fromPageId, to: page.id, kind, count: 1, lastAt: page.lastVisit })
   }
 
-  private reportNavigationError(entry: CuraWindow, message: string): void {
-    if (!entry.window.webContents.isDestroyed()) {
-      entry.window.webContents.send(channels.navigationError, message)
-    }
+  private reportNavigationError(entry: CuraEntry, message: string): void {
+    for (const tab of entry.pages) if (tab.window && !tab.window.webContents.isDestroyed()) tab.window.webContents.send(channels.navigationError, message)
   }
 
-  private guardNavigation(entry: CuraWindow, event: Electron.Event, nextUrl: string, tab?: CuraPage): void {
+  private guardNavigation(entry: CuraEntry, event: Electron.Event, nextUrl: string, tab?: CuraPage): void {
     if (isAllowedNavigationUrl(nextUrl) && (tab?.initialNavigationKind !== 'explore' || (isAllowedExplorationUrl(nextUrl) && this.formaRegistry.allowsAutomation(nextUrl, tab.habitusId)))) return
     event.preventDefault()
     this.reportNavigationError(entry, tab?.initialNavigationKind === 'explore'
@@ -692,19 +781,4 @@ export class CuraWindowFactory implements CuraController {
       : 'Only HTTP and HTTPS URLs without credentials are supported.')
   }
 
-  private layoutView(entry: CuraWindow): void {
-    const active = this.activePage(entry)
-    if (!active) return
-    const bounds = entry.window.getContentBounds()
-    const comparatioHeight = entry.comparatioOpen
-      ? curaLayout.comparatioPanelHeight
-      : curaLayout.comparatioToggleHeight
-    const contentTop = curaLayout.toolbarHeight + comparatioHeight
-    active.view.setBounds({
-      x: entry.graphPaneCollapsed ? 0 : GRAPH_PANE_WIDTH,
-      y: contentTop,
-      width: Math.max(0, bounds.width - (entry.graphPaneCollapsed ? 0 : GRAPH_PANE_WIDTH) - (entry.settingsPaneOpen ? SETTINGS_PANE_WIDTH : 0)),
-      height: Math.max(0, bounds.height - contentTop)
-    })
-  }
 }

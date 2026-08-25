@@ -44,8 +44,12 @@ import { selectRotaCura, selectRotaPage } from '../rota/actions.js'
 import { buildRotaSnapshot } from '../rota/snapshot.js'
 import { filterRotaSnapshot } from '../rota/search.js'
 import { auditPageEvents } from '../vinculum/page-audit.js'
+import { AnulusWindow } from '../anulus/window.js'
+import { SpeculumWindow } from '../speculum/window.js'
+import { WindowStateRepository } from '../tabularium/repositories/window-state-repo.js'
+import { channels } from '../ipc/channels.js'
 
-/** @implements SPEC-ORBIS-P0-RADIX SPEC-ORBIS-P3-CLAVIS SPEC-ORBIS-P3-GESTUS SPEC-ORBIS-P3-SETTINGS SPEC-ORBIS-P4-ROTA SPEC-ORBIS-P4-OVERLAY SPEC-ORBIS-P7-START-SCREEN */
+/** @implements SPEC-ORBIS-P0-RADIX SPEC-ORBIS-P3-CLAVIS SPEC-ORBIS-P3-GESTUS SPEC-ORBIS-P3-SETTINGS SPEC-ORBIS-P4-ROTA SPEC-ORBIS-P4-OVERLAY SPEC-ORBIS-P7-START-SCREEN SPEC-ORBIS-P8-ANULUS SPEC-ORBIS-P8-SPECULUM */
 export async function bootstrap(): Promise<void> {
   if (!app.requestSingleInstanceLock()) {
     app.quit()
@@ -68,6 +72,9 @@ export async function bootstrap(): Promise<void> {
   const disposeSessionPermissions = [...restrictedSessions].map(denySessionPermissions)
 
   const db = openDatabase()
+  const windowStates = new WindowStateRepository(db)
+  const anulus = new AnulusWindow(windowStates)
+  const speculum = new SpeculumWindow(windowStates)
   const bindingStore = new BindingStore(db)
   const pageRepository = new PageRepository(db)
   const curaRepository = new CuraRepository(db)
@@ -99,13 +106,19 @@ export async function bootstrap(): Promise<void> {
     sigillumService.revokeBrowserSigilla(curaId)
     browserSigilla.set(curaId, sigillumService.issue('browser', curaId, null))
   }
-  function createCura(): BrowserWindow {
+  function createCura(): string {
     const cura = service.create()
     issueBrowserSigillum(cura.id)
-    return factory.create(cura)
+    factory.create(cura)
+    factory.activateCura(cura.id)
+    return cura.id
   }
   factory = new CuraWindowFactory(pageRepository, {
     onNewCura: () => createCura(),
+    onFocusAnulus: () => {
+      const window = anulus.open()
+      window.focus()
+    },
     onCuraChanged: (cura) => service.update(cura),
     onWebContentsCreated: (window, webContents) => {
       registerLocalShortcuts(webContents, (id) => run(id, window), () => bindingStore.keyBindings())
@@ -116,13 +129,24 @@ export async function bootstrap(): Promise<void> {
       browserSigilla.delete(curaId)
     },
     onRevealUmbra: (curaId, pageId) => auditLog.record(sigillumService.forPage(curaId, pageId), 'user', 'reveal', { pageId }),
-    onPageClosed: (curaId, pageId) => sigillumService.revokePage(curaId, pageId)
-  }, graphStore, habitusService, comparatioService, new FormaRegistry([amazonForma, googleForma]))
+    onPageClosed: (curaId, pageId) => sigillumService.revokePage(curaId, pageId),
+    onGraphChanged: (curaId, state) => {
+      if (factory.currentCuraId() !== curaId) return
+      const graphWindow = speculum.windowForIpc()
+      if (graphWindow && !graphWindow.webContents.isDestroyed()) graphWindow.webContents.send(channels.graph, state)
+      const anulusWindow = anulus.windowForIpc()
+      if (anulusWindow && !anulusWindow.webContents.isDestroyed()) anulusWindow.webContents.send(channels.anulusState, factory.anulusSnapshot())
+    }
+  }, graphStore, habitusService, comparatioService, new FormaRegistry([amazonForma, googleForma]), windowStates)
 
   const resolveWindow = (senderId: number): BrowserWindow | undefined => factory.resolveUiWindow(senderId)
   const resolveAnyWindow = (senderId: number): BrowserWindow | undefined => factory.resolveWindow(senderId)
   const registerBindings = (): void => registerGlobalShortcuts((id) => {
-    const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const focusedWindow = BrowserWindow.getFocusedWindow()
+    const window = (focusedWindow && resolveWindow(focusedWindow.webContents.id))
+      ?? factory.activePageWindow()
+      ?? focusedWindow
+      ?? BrowserWindow.getAllWindows()[0]
     if (window) run(id, window)
   }, bindingStore.keyBindings())
   const gestus = new GestusService(bindingStore, run)
@@ -130,7 +154,14 @@ export async function bootstrap(): Promise<void> {
     registerActionHandler(resolveWindow, run),
     registerNavigateHandler(resolveWindow, (window, input, mode) => factory.navigate(window, input, mode)),
     registerSelectPageHandler(resolveWindow, (window, pageId) => factory.selectPage(window, pageId)),
-    registerReadyHandler(resolveWindow, (window) => factory.publishState(window)),
+    registerReadyHandler((senderId) => resolveWindow(senderId) ?? (speculum.windowForIpc()?.webContents.id === senderId ? speculum.windowForIpc() : undefined) ?? (anulus.windowForIpc()?.webContents.id === senderId ? anulus.windowForIpc() : undefined), (window) => {
+      if (window === speculum.windowForIpc()) {
+        const curaId = factory.currentCuraId()
+        if (curaId) window.webContents.send(channels.graph, factory.graphSnapshot(curaId))
+      } else if (window === anulus.windowForIpc()) {
+        window.webContents.send(channels.anulusState, factory.anulusSnapshot())
+      } else factory.publishState(window)
+    }),
     registerSearchHandler(resolveWindow, (window, query) => factory.search(window, query)),
     registerGraphPaneHandler(resolveWindow, (window, collapsed, layout) => factory.setGraphPane(window, collapsed, layout)),
     registerPageContentHandler((senderId, content) => factory.savePageContent(senderId, content)),
@@ -163,21 +194,72 @@ export async function bootstrap(): Promise<void> {
       }
     })
   ]
-  app.once('before-quit', () => rotaOverlay.destroy())
+  /** @implements SPEC-ORBIS-P8-ANULUS Only the Anulus renderer may create a Cura from shell input. */
+  const openFromAnulus = (event: Electron.IpcMainEvent, payload: unknown): void => {
+    if (anulus.windowForIpc()?.webContents.id !== event.sender.id) return
+    if (typeof payload !== 'object' || payload === null) return
+    const { input, mode } = payload as { input?: unknown; mode?: unknown }
+    if (typeof input !== 'string') return
+    const curaId = factory.currentCuraId() ?? createCura()
+    factory.openInCura(curaId, input, mode === 'url' || mode === 'search' ? mode : 'auto')
+  }
+  /** @implements SPEC-ORBIS-P8-ANULUS Only Anulus may create or select a logical Cura. */
+  const newCuraFromAnulus = (event: Electron.IpcMainEvent): void => {
+    if (anulus.windowForIpc()?.webContents.id === event.sender.id) createCura()
+  }
+  const selectCuraFromAnulus = (event: Electron.IpcMainEvent, curaId: unknown): void => {
+    if (anulus.windowForIpc()?.webContents.id !== event.sender.id || typeof curaId !== 'string') return
+    factory.activateCura(curaId)
+  }
+  /** @implements SPEC-ORBIS-P8-ANULUS SPEC-ORBIS-P8-SPECULUM Restrict page selection to trusted shell renderers. */
+  const selectFromShell = (event: Electron.IpcMainEvent, pageId: unknown): void => {
+    const senderId = event.sender.id
+    const isTrustedShell = anulus.windowForIpc()?.webContents.id === senderId
+      || speculum.windowForIpc()?.webContents.id === senderId
+    if (isTrustedShell && typeof pageId === 'string') factory.selectPageById(pageId)
+  }
+  /** @implements SPEC-ORBIS-P8-SPECULUM Only Anulus may toggle the graph window. */
+  const toggleSpeculum = (event: Electron.IpcMainEvent): void => {
+    if (anulus.windowForIpc()?.webContents.id === event.sender.id) speculum.toggle()
+  }
+  const publishAnulus = (): void => {
+    const window = anulus.windowForIpc()
+    if (window && !window.webContents.isDestroyed()) window.webContents.send(channels.anulusState, factory.anulusSnapshot())
+  }
+  const { ipcMain } = await import('electron')
+  ipcMain.on(channels.anulusOpen, openFromAnulus)
+  ipcMain.on(channels.anulusNewCura, newCuraFromAnulus)
+  ipcMain.on(channels.anulusSelectCura, selectCuraFromAnulus)
+  ipcMain.on(channels.speculumSelect, selectFromShell)
+  ipcMain.on(channels.speculumToggle, toggleSpeculum)
+  app.once('before-quit', () => {
+    factory.prepareToQuit()
+    rotaOverlay.destroy()
+    anulus.destroy()
+    speculum.destroy()
+  })
   app.once('will-quit', () => {
     void vinculum.stop().catch(() => undefined)
     unregisterGlobalShortcuts()
     for (const dispose of disposeIpc) dispose()
+    ipcMain.removeListener(channels.anulusOpen, openFromAnulus)
+    ipcMain.removeListener(channels.anulusNewCura, newCuraFromAnulus)
+    ipcMain.removeListener(channels.anulusSelectCura, selectCuraFromAnulus)
+    ipcMain.removeListener(channels.speculumSelect, selectFromShell)
+    ipcMain.removeListener(channels.speculumToggle, toggleSpeculum)
     for (const dispose of disposeSessionPermissions) dispose()
     db.close()
   })
 
   const restored = service.list()
-  if (restored.length === 0) createCura()
+  anulus.open()
+  speculum.open()
   for (const cura of restored) {
     issueBrowserSigillum(cura.id)
     factory.create(cura, pageRepository.listByCura(cura.id))
   }
+  if (restored.length === 0) createCura()
+  publishAnulus()
 
   /** @implements SPEC-ORBIS-P5-VINCULUM Cc 専用の loopback MCP ブリッジ。ポートは OS 採番し vinculum.json に書く。 */
   const vinculum = new VinculumServer(
@@ -191,7 +273,8 @@ export async function bootstrap(): Promise<void> {
     .catch((error: unknown) => console.error('Unable to start Vinculum.', error))
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createCura()
+    anulus.open()
+    speculum.open()
   })
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()

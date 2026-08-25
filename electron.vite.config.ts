@@ -10,8 +10,10 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          main: resolve(__dirname, 'src/renderer/index.html'),
-          rota: resolve(__dirname, 'src/renderer/rota.html')
+          rota: resolve(__dirname, 'src/renderer/rota.html'),
+          anulus: resolve(__dirname, 'src/renderer/anulus.html'),
+          speculum: resolve(__dirname, 'src/renderer/speculum.html'),
+          page: resolve(__dirname, 'src/renderer/page.html')
         }
       }
     }

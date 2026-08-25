@@ -23,20 +23,18 @@ const page = {
 }
 
 describe('Rota actions', () => {
-  it('selects a dormant Cura page after its restored views are ready', () => {
-    let didFinishLoad: (() => void) | undefined
+  it('restores and selects a dormant Cura page', () => {
     const window = {
       isDestroyed: () => false,
       isMinimized: () => false,
       restore: vi.fn(),
       show: vi.fn(),
-      focus: vi.fn(),
-      webContents: { once: (_event: string, listener: () => void) => { didFinishLoad = listener } }
+      focus: vi.fn()
     }
     const factory = {
-      windowForCura: () => undefined,
-      create: vi.fn(() => window),
-      selectPage: vi.fn()
+      create: vi.fn(),
+      activateCura: vi.fn(),
+      selectPageById: vi.fn(() => window)
     }
 
     expect(selectRotaPage(
@@ -46,14 +44,12 @@ describe('Rota actions', () => {
       { listByCura: () => [page] },
       factory as never
     )).toBe(window)
-    expect(factory.selectPage).not.toHaveBeenCalled()
-
-    didFinishLoad?.()
-    expect(factory.selectPage).toHaveBeenCalledWith(window, page.id)
+    expect(factory.create).toHaveBeenCalledWith(cura, [page])
+    expect(factory.selectPageById).toHaveBeenCalledWith(page.id)
   })
 
   it('rejects a page that does not belong to the requested Cura', () => {
-    const factory = { windowForCura: vi.fn(), create: vi.fn(), selectPage: vi.fn() }
+    const factory = { create: vi.fn(), activateCura: vi.fn(), selectPageById: vi.fn() }
     expect(selectRotaPage(
       cura.id,
       'different-page',
