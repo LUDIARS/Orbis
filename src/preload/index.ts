@@ -6,17 +6,26 @@ import {
   type RendererEventName
 } from '../shared/ipc-contract.js'
 
-const rendererEvents = new Set<RendererEventName>([
-  channels.pages,
-  channels.navigationError,
-  channels.fenestraState,
-  channels.graph,
-  channels.searchResult,
-  channels.habitusState,
-  channels.comparatio,
-  channels.gestureOverlay,
-  channels.rotaSnapshot
-])
+/**
+ * renderer が購読してよいイベント。 Record<RendererEventName, true> にしてあるのは、
+ * 新しいイベントを contract に足したときに ここへの追加漏れを型エラーにするため
+ * (漏れると App のマウント時に throw して UI が丸ごと描画されなくなる)。
+ */
+const rendererEventAllowlist: Record<RendererEventName, true> = {
+  [channels.pages]: true,
+  [channels.navigationError]: true,
+  [channels.fenestraState]: true,
+  [channels.graph]: true,
+  [channels.searchResult]: true,
+  [channels.focusSearch]: true,
+  [channels.toggleGraphLayout]: true,
+  [channels.habitusState]: true,
+  [channels.comparatio]: true,
+  [channels.gestureOverlay]: true,
+  [channels.rotaSnapshot]: true
+}
+
+const rendererEvents = new Set<RendererEventName>(Object.keys(rendererEventAllowlist) as RendererEventName[])
 
 /** @implements SPEC-ORBIS-P0-IPC SPEC-ORBIS-P7-START-SCREEN */
 const bridge: OrbisBridge = {
