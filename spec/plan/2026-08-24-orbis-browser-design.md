@@ -2,7 +2,7 @@
 
 - 日付: 2026-08-24
 - 依頼: neco「用途別にそれぞれ違うスタイルをとれるブラウザサービス」
-- 状態: 設計 (製品名 Orbis 決定 2026-08-24、内部モジュール名は仮)
+- 状態: 設計 (製品名・内部モジュール名決定 2026-08-24、Anulus シェル追補 2026-08-25)
 - 略称: `Ob` (Orbis) — PROJECT-CODES.md で未使用を確認済
 
 ## 0. 命名 (ラテン語)
@@ -11,7 +11,7 @@
 |---|---|---|
 | **Orbis** | 円・世界 | 製品名。関心ごとに世界 (Orbis) を持ち、円状のロールで巡るブラウザ (副題: Orbis Curarum) |
 | **Radix** | 根 | Chromium 基盤層。Electron の版追従だけを責務にする |
-| **Cura** | 関心事 | 1 グラフ = 1 Cura。1 Cura = 1 ウインドウ |
+| **Cura** | 関心事 | 1 グラフ = 1 Cura。Cura ごとに所属するページウインドウ群を切り替える |
 | **Nexus** | 結び目・連結 | ページ遷移グラフ (ノード=ページ、エッジ=遷移/参照) |
 | **Habitus** | 様態・装い | 用途別スタイルプロファイル (モバイル確認 / 買い物比較 / 通常) |
 | **Forma** | 型 | サイト別ページ最適化 (Amazon 等の CSS/JS 注入) |
@@ -30,7 +30,7 @@
 | R1 | Chromium ベース、更新をいち早く取り込む | Radix |
 | R2 | PC のみ (Windows / macOS / Linux。neco 決定 2026-08-24) | Radix |
 | R3 | グラフで関連ページの遷移と検索 | Nexus, Indagatio |
-| R4 | 1 グラフ = 1 関心、関心ごとにウインドウ | Cura, Fenestra |
+| R4 | 1 グラフ = 1 関心、1 ページ = 1 独立ウインドウ | Cura, Fenestra, Anulus |
 | R5 | モバイル UA + モバイルサイズ / 買い物比較 / Amazon 最適化 | Habitus, Forma, Comparatio |
 | R6 | マウスジェスチャ・ショートカットを自在に設定 | Gestus, Clavis |
 | R7 | ショートカットで「グラフロール」 | Rota |
@@ -68,7 +68,7 @@
 ```
 ┌──────────────── main process ──────────────────┐
 │ Radix      … app lifecycle / electron bump 境界  │
-│ Cura       … 関心の CRUD, Cura <-> BrowserWindow │
+│ Cura       … 関心の CRUD, Cura <-> page windows  │
 │ Nexus      … グラフ状態 (in-memory) + イベント   │
 │ Habitus    … session partition / UA / 画面寸法   │
 │ Forma      … サイト別注入スクリプト登録           │
@@ -102,9 +102,10 @@ type ActionId = "page.back" | "page.forward" | "page.close" | "cura.new" | "cura
 
 ### 4.1 Cura (関心) と Fenestra (ウインドウ)
 - `Cura { id, title, color, habitusId, createdAt, lastActiveAt }`
-- 1 Cura に 1 `BrowserWindow`。左に GraphPane、右に現在ページ (WebContentsView)。GraphPane は折りたたみ可。
+- Cura はウインドウではなく、Nexus グラフと所属ページウインドウ群をまとめる論理単位。最終シェル構成は §10 に従う。
+- 1 ページに 1 `BrowserWindow` + `WebContentsView`。Nexus グラフは独立した Speculum ウインドウに表示する。
 - Cura を跨ぐページ移動 (ドラッグ or アクション `page.moveToCura`) を用意。
-- ウインドウ閉 = Cura 休眠 (グラフは Tabularium に残る)。削除は明示操作のみ。
+- Cura の切替では所属ウインドウ群を畳み、グラフは Tabularium に残す。Cura の削除は明示操作のみ。
 
 ### 4.2 Nexus (グラフ)
 - ノード: `Page { id, curaId, url, title, favicon, thumbnail, firstVisit, lastVisit, pinned }`
@@ -150,13 +151,13 @@ type ActionId = "page.back" | "page.forward" | "page.close" | "cura.new" | "cura
 ### 4.7 Rota (グラフロール)
 - 常駐の透明 frameless オーバーレイ window (画面中央、AlwaysOnTop、呼出時のみ表示)。
 - 中央に Cura を円状配置 (色+タイトル+ノード数)。ホイール/矢印で回転、Enter/クリックで選択。
-- 選択後、右側にその Cura のウインドウ内ページ一覧 (直近アクセス順、サムネ付き)。インクリメンタル検索欄は Indagatio に接続。
+- 選択後、右側にその Cura のページ一覧 (直近アクセス順、サムネ付き)。インクリメンタル検索欄は Indagatio に接続。
 - Esc で閉じる。マウスが外へ出ても閉じない (キーボード操作前提)。
 
 ### 4.8 Fenestra (ウインドウ制御)
-- `alwaysOnTop.toggle`: `setAlwaysOnTop(!cur, "floating")`。状態を Cura に保存。
-- `minimizeOthers`: 全 Cura window のうち `isAlwaysOnTop() === false` を `minimize()`。Rota オーバーレイは対象外。
-- `opacity.cycle`: `setOpacity()`。Windows/mac で有効。Linux は Electron が未対応のため代替として「AlwaysOnTop + 縮小表示」に自動フォールバック (設定で無効化可)。
+- `alwaysOnTop.toggle`: 対象ページウインドウへ `setAlwaysOnTop(!cur, "floating")`。状態をページ単位に保存。
+- `minimizeOthers`: ページウインドウのうち `isAlwaysOnTop() === false` を `minimize()`。Anulus / Speculum / Rota は対象外。
+- `opacity.cycle`: 対象ページウインドウへ `setOpacity()`。Windows/mac で有効。Linux は Electron が未対応のため代替として「AlwaysOnTop + 縮小表示」に自動フォールバック (設定で無効化可)。
 - 状態遷移は `fenestra/state-machine.ts` に集約し、ショートカット側は Action 経由でしか触らない。
 
 ### 4.9 Indagatio (検索) / Tabularium (永続化)
@@ -208,9 +209,9 @@ Orbis/
 
 | 名称 | 意味 | 役割 |
 |---|---|---|
-| **Sigillum** | 印章 | ブラウザ (Cura ウインドウ) / ページごとのセッション ID。Cc へ渡す鍵 |
+| **Sigillum** | 印章 | 論理ブラウザ (Cura) / ページごとのセッション ID。Cc へ渡す鍵 |
 | **Vinculum** | 絆・つなぎ | Cc 専用の API/MCP ブリッジ。一般公開しない |
-| **Umbra** | 影 | LLM が開いた非描画 (ヘッドレス) ページの状態。ユーザ操作/指示で可視化 |
+| **Umbra** | 影 | ウインドウへ attach していない非描画ページの状態。LLM の新規ページは既定で Umbra、既存ページも配置上限超過時に一時的に遷移 |
 | **Exploratio** | 偵察・探索 | 自動検索。クエリ→結果→遷移をグラフ上に可視化しながら進める |
 
 ### 7.1 要件
@@ -224,7 +225,7 @@ Orbis/
 | R13 | LLM 操作時の新規ページは非描画。ユーザ操作/指示で初めて可視化 | Umbra |
 
 ### 7.2 Sigillum (セッション ID)
-- 2 階層: `browserSigillum` (Cura ウインドウ = 1 ブラウザに 1 つ、起動ごとに再発行) と `pageSigillum` (WebContentsView ごと、安定 ID)。
+- 2 階層: `browserSigillum` (Cura = 1 論理ブラウザに 1 つ、起動ごとに再発行) と `pageSigillum` (WebContentsView ごと、安定 ID)。
 - 形式: `ob_<cura短縮>_<ulid>`。UI ではアドレスバー右端のスタンプアイコンからコピー / Cc へ直接送信 (`vinculum.attach`) できる。
 - 「操作対象にする」= Cc 側で `sigillum` を task/session に紐づける (Cc の PATCH /v1/sessions/:id 拡張、既存の repo rebind と同じ流儀)。
 - Tabularium に `sigillum` テーブル (id, kind, curaId, pageId, issuedAt, attachedTo: ccSessionId?) を持ち、ログ (§7.5) の主キーにする。
@@ -270,8 +271,8 @@ Orbis/
 - 可視化の条件 (どちらか):
   1. ユーザ操作: GraphPane の半透明ノードをクリック / Rota から選択
   2. ユーザ指示: Cc に「見せて」と言った結果として Cc が `orbis.reveal` を呼ぶ。Vinculum はこの呼び出しに **Cc 側のユーザ発話 ID** を要求し、無ければ拒否 (LLM の自律判断だけでは可視化できない)
-- 可視化 = 現在の Cura ウインドウに view を attach してフロントへ。Umbra 中もセッション/Cookie は Habitus の partition を共有する (ログイン状態を引き継ぐ)。
-- Umbra ページ数の上限 (既定 20) を超えたら古い順に破棄し、Nexus にはノードだけ残す。
+- 可視化 = 対象 view 用の独立したページウインドウを作ってフロントへ出す。Umbra 中もセッション/Cookie は Habitus の partition を共有する (ログイン状態を引き継ぐ)。
+- Umbra ページ数の上限 (既定 20) を超えたら、LLM が非描画で新規作成した未固定ページだけを古い順に破棄し、Nexus にはノードを残す。Dispositio が畳んだ既存ページは自動破棄しない。
 
 ### 7.7 フェーズへの追加
 
@@ -305,3 +306,102 @@ Mac/Linux を対象に含めた時点で R1 (Chromium ベース) を満たせな
 
 結論: **Electron 継続**。Tauri の利点は軽さのみで、本製品の中核要件 (Chromium 一致・エミュレーション・非描画・partition) の 4 つで劣る。
 なお Tauri + CEF を組む案 (community plugin) は成熟しておらず、結局 CEF 側の追従とホスト実装を自前で持つことになり案 B と同じコストになる。
+
+## 10. Anulus シェル — ウインドウ構成の作り替え (neco 指示 2026-08-25)
+
+### 10.0 きっかけと骨子
+
+neco 指示: 「Electron のメインウインドウは不要。子プロセスのブラウザビュー画面が複数個立ち上がるイメージ。
+中央に円ボタンの管理 UI があり、子プロセスのビューはその管理 UI の子供として作られ、エッジを持つ。
+バラバラに配置するモード、グラフ状に配置するモード (ビューに表示される数を選べる)、あと最前面や
+円に追従して移動するかどうかなどの動きを指定可能」。
+
+これまでの「1 Cura = 1 BrowserWindow、その中に WebContentsView をタブとして重ねる」構造をやめ、
+**中央の円 (Anulus) + 独立したビューウインドウ群**へ作り替える。Nexus / Habitus / Forma / Comparatio /
+Gestus / Clavis / Sigillum / Vinculum / Umbra / Exploratio の各モジュールは据え置き、
+既存のドメインロジックは保ちつつ、シェル (Radix の window 層と renderer)、Fenestra の操作単位、
+Tabularium のウインドウ状態、配置計算を置き換える。
+
+### 10.1 命名 (追加)
+
+| 名称 | 意味 | 役割 |
+|---|---|---|
+| **Anulus** | 環・指輪 | 画面中央に浮かぶ円形の管理 UI。全ビューの管理上の親となる常設ウインドウ |
+| **Dispositio** | 配置 | ビューウインドウの配置モード (散開 / グラフ状) と、その計算 |
+| **Speculum** | 鏡・見晴らし | Nexus グラフを常設表示する専用ウインドウ (旧 GraphPane の置き場所) |
+
+Rota (車輪) は既存のショートカット起動オーバーレイのままで、Anulus とは別物。
+
+### 10.2 Anulus (円形管理 UI)
+
+- 枠なし・背景透過・常時最前面の小さな円ウインドウ。ドラッグで移動でき、位置は Tabularium に永続化する。
+- 中心は **URL / 検索の入力欄**。P7 start screen (`SPEC-ORBIS-P7-START-SCREEN`) と同じ自動判定 (URL か検索語か) とモード切替を持つ。
+  ここから開くと新しいビューウインドウが Anulus の子として生まれる。
+- 円周には現在のビューが並ぶ。クリックで前面化、ドラッグで配置変更、右クリックでそのビューの挙動設定。
+- Cura (関心) の切替も円周から行う。Anulus は常に「いまの Cura」に属するビューだけを並べる。
+
+### 10.3 ビューウインドウ
+
+- 1 ページ = 1 独立ウインドウ (`BrowserWindow` + `WebContentsView`)。タブは廃止する。
+- Anulus との親子関係は Cura / Nexus 上の論理的な所有関係とする。OS の owner/child 関係には依存せず、最前面・最小化・追従を個別に制御する。
+- 上部に**細いバー**を持つ: 戻る / 進む / 再読込 / URL 表示・入力 / sigillum スタンプ。
+  Anulus からも開けるが、そのウインドウ内で行き先を変えたいときはここを使う。
+- Umbra (非描画ページ) はウインドウを作らない。可視化 (reveal) された時に初めてウインドウになる。
+
+### 10.3.1 Speculum (常設グラフウインドウ) — neco 決定 2026-08-25
+
+GraphPane は無くさず、**独立した常設ウインドウ**として残す (メインウインドウが消えるため置き場所を移す)。
+
+- 枠なしの 1 枚。Anulus と同じく常設で、閉じるのではなく畳む (Anulus の円周から出し入れする)。
+- 他のビューと同じ挙動指定を受ける: 最前面 / 円に追従 / 透明度 / 固定。Dispositio の再配置対象にもなる。
+- ノードクリックで対応するビューウインドウを前面化する。Umbra ノードはクリックで reveal (= ウインドウ化)。
+- 表示するのは「いまの Cura」のグラフ。Cura を切り替えると中身が入れ替わる。
+- 描画は既存の cytoscape 実装 (`src/renderer/GraphPane/`) をそのまま移設し、常設ペインから常設ウインドウへ器だけ変える。
+
+### 10.4 親子関係の見せ方 — 線は引かない (neco 決定 2026-08-25)
+
+ウインドウを跨ぐエッジ線は描かない。代わりに:
+
+- **配置**: Dispositio のグラフ状モードで、親から子へ向かう方向に並べる。
+- **近接**: 親子は近く、無関係なものは離す。
+- **枠色**: 同じ Cura のビューは同色の細い枠、親子は濃淡で示す。Anulus の円周上の並びと色を一致させる。
+
+透過オーバーレイで線を引く案は、マルチモニタと入力の抜けの扱いが重くなるため採らない。
+
+### 10.5 Dispositio (配置モード)
+
+| モード | 動き |
+|---|---|
+| `sparsus` (散開) | ウインドウを重ならないよう画面へ散らす。手で動かした位置は尊重し、新規ぶんだけ空き領域へ置く |
+| `graphus` (グラフ状) | Nexus の親子に沿って格子/放射状に並べる。**同時表示数 N** を指定でき、溢れたぶんはウインドウを畳んで Umbra 状態にする |
+
+- 同時表示数はビューあたりの負荷に直結するため、Anulus から即変更できるようにする。
+- N は現在の Cura のページウインドウだけを数え、Anulus / Speculum は含めない。現在ページと固定された可視ページは必ず残し、N の下限をその重複を除いた枚数とする。残りは最終アクセスの新しい順に残す。
+- 配置計算は純粋関数 (`src/main/dispositio/*.ts`) に置き、ウインドウ操作と分離してテストする。
+
+### 10.6 ビューごとの挙動
+
+Anulus の右クリックメニューと設定ペインから、ビュー単位で指定する。既定値は Habitus に持たせる。
+
+| 指定 | 内容 |
+|---|---|
+| 最前面 | そのビューだけ常時最前面にする (Fenestra の alwaysOnTop をビュー単位へ降ろす) |
+| 円に追従 | Anulus を動かしたとき、相対位置を保って一緒に動く |
+| 透明度 | 既存 Fenestra の opacity をビュー単位へ |
+| 固定 | Dispositio の再配置対象から外す (手で置いた位置を保つ) |
+
+### 10.7 フェーズ
+
+| Phase | 内容 | 完了条件 |
+|---|---|---|
+| P8 | Anulus 骨格 + ビューウインドウ化 (タブ廃止・細いバー) + Speculum 移設 | メインウインドウ無しで、円から URL/検索を開いて複数ウインドウが並び、常設グラフが出る |
+| P9 | Dispositio (sparsus / graphus + 同時表示数) | 配置モードを切り替えると実際に並び替わり、溢れが Umbra へ落ちる |
+| P10 | ビューごとの挙動 (最前面 / 追従 / 透明度 / 固定) + 枠色と近接の親子表現 | 円を動かすと追従ビューが付いてくる。同 Cura が同色で見分けられる |
+
+### 10.8 影響と移行
+
+- 削除: `CuraShell` のツールバー・タブ (`PageTabs`)。GraphPane は削除せず Speculum ウインドウへ移設する。
+- 据え置き: Nexus / Tabularium / Habitus / Forma / Comparatio / Clavis / Gestus / Vinculum / Umbra / Exploratio。
+- Vinculum の `orbis.open` が返す pageSigillum は従来どおり「ページ / WebContentsView 1 つ」に対応する。Umbra にはウインドウがないため、ウインドウ ID を契約へ含めない。
+- 既存の `page` テーブルはそのまま使い、Anulus / Speculum / ページのウインドウ位置とビュー挙動は所有種別と所有 ID をキーにした新テーブルへ持つ (migration 0005)。
+- 保存する位置は display ID と bounds の組にし、復元時に該当 display がなければ最寄りの `workArea` 内へ収める。マルチモニタ構成変更後も画面外へ復元しない。
