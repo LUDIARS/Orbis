@@ -18,10 +18,11 @@ export interface PageWindowOptions {
   onRendererReady(window: BrowserWindow): void
 }
 
-/** @implements SPEC-ORBIS-P8-PAGE-WINDOW A visible page owns exactly one BrowserWindow. */
+/** @implements SPEC-ORBIS-P8-PAGE-WINDOW SPEC-ORBIS-BORDERLESS-WINDOW A visible page owns exactly one frameless BrowserWindow. */
 export class PageWindowFactory {
   constructor(private readonly states?: WindowStateRepository) {}
 
+  /** @implements SPEC-ORBIS-BORDERLESS-WINDOW */
   create(options: PageWindowOptions): BrowserWindow {
     const saved = this.states?.get('page', options.ownerId())
     const display = saved
@@ -36,6 +37,7 @@ export class PageWindowFactory {
       y: bounds?.y,
       show: saved?.visible ?? true,
       title: options.title,
+      frame: false,
       alwaysOnTop: options.alwaysOnTop,
       opacity: options.opacity,
       webPreferences: {

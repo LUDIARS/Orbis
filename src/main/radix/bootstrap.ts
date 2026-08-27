@@ -48,8 +48,9 @@ import { AnulusWindow } from '../anulus/window.js'
 import { SpeculumWindow } from '../speculum/window.js'
 import { WindowStateRepository } from '../tabularium/repositories/window-state-repo.js'
 import { channels } from '../ipc/channels.js'
+import { registerWindowDragHandler } from '../ipc/handlers/register-window-drag-handler.js'
 
-/** @implements SPEC-ORBIS-P0-RADIX SPEC-ORBIS-P3-CLAVIS SPEC-ORBIS-P3-GESTUS SPEC-ORBIS-P3-SETTINGS SPEC-ORBIS-P4-ROTA SPEC-ORBIS-P4-OVERLAY SPEC-ORBIS-P7-START-SCREEN SPEC-ORBIS-P8-ANULUS SPEC-ORBIS-P8-SPECULUM */
+/** @implements SPEC-ORBIS-P0-RADIX SPEC-ORBIS-P3-CLAVIS SPEC-ORBIS-P3-GESTUS SPEC-ORBIS-P3-SETTINGS SPEC-ORBIS-P4-ROTA SPEC-ORBIS-P4-OVERLAY SPEC-ORBIS-P7-START-SCREEN SPEC-ORBIS-P8-ANULUS SPEC-ORBIS-P8-SPECULUM SPEC-ORBIS-BORDERLESS-WINDOW-DRAG */
 export async function bootstrap(): Promise<void> {
   if (!app.requestSingleInstanceLock()) {
     app.quit()
@@ -192,7 +193,8 @@ export async function bootstrap(): Promise<void> {
         browser: browserSigilla.get(info.curaId) ?? null,
         page: sigillumService.forPage(info.curaId, info.pageId)
       }
-    })
+    }),
+    registerWindowDragHandler(resolveAnyWindow)
   ]
   /** @implements SPEC-ORBIS-P8-ANULUS Only the Anulus renderer may create a Cura from shell input. */
   const openFromAnulus = (event: Electron.IpcMainEvent, payload: unknown): void => {

@@ -39,8 +39,15 @@ export const channels = {
   anulusSelectCura: 'orbis:anulus-select-cura',
   anulusState: 'orbis:anulus-state',
   speculumSelect: 'orbis:speculum-select',
-  speculumToggle: 'orbis:speculum-toggle'
+  speculumToggle: 'orbis:speculum-toggle',
+  windowDrag: 'orbis:window-drag'
 } as const
+
+export type WindowDragPhase = 'begin' | 'move' | 'end'
+/** @implements SPEC-ORBIS-BORDERLESS-CONTROL-DRAG SPEC-ORBIS-BORDERLESS-WEBVIEW-DRAG */
+export const WINDOW_DRAG_THRESHOLD_PX = 6
+/** @implements SPEC-ORBIS-BORDERLESS-WINDOW-DRAG */
+export interface WindowDragInput { phase: WindowDragPhase; screenX: number; screenY: number }
 
 export interface PageViewState {
   id: string
@@ -146,6 +153,7 @@ export interface OrbisBridge {
   anulusSelectCura(curaId: string): void
   speculumSelect(pageId: string): void
   speculumToggle(): void
+  windowDrag(input: WindowDragInput): void
   ready(): void
   on<K extends RendererEventName>(channel: K, listener: (value: RendererEventMap[K]) => void): () => void
 }

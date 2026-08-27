@@ -223,6 +223,7 @@ Orbis/
 | R11 | API/MCP として接続。自動遷移・ページ内容確認・Memoria への転送 | Vinculum |
 | R12 | Cc のみと連携。一般 API として公開しない | Vinculum (認証・バインド) |
 | R13 | LLM 操作時の新規ページは非描画。ユーザ操作/指示で初めて可視化 | Umbra |
+| R14 | ページウインドウはボーダーレス。右上コントロールはタップでメニュー、ドラッグで移動し、閲覧面の空背景からも移動できる | Fenestra, Cura |
 
 ### 7.2 Sigillum (セッション ID)
 - 2 階層: `browserSigillum` (Cura = 1 論理ブラウザに 1 つ、起動ごとに再発行) と `pageSigillum` (WebContentsView ごと、安定 ID)。

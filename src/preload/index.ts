@@ -54,6 +54,8 @@ const bridge: OrbisBridge = {
   anulusSelectCura: (curaId) => ipcRenderer.send(channels.anulusSelectCura, curaId),
   speculumSelect: (pageId) => ipcRenderer.send(channels.speculumSelect, pageId),
   speculumToggle: () => ipcRenderer.send(channels.speculumToggle),
+  /** @implements SPEC-ORBIS-BORDERLESS-WINDOW-DRAG */
+  windowDrag: (input) => ipcRenderer.send(channels.windowDrag, input),
   ready: () => ipcRenderer.send(channels.ready),
   on: <K extends RendererEventName>(channel: K, listener: (value: RendererEventMap[K]) => void): (() => void) => {
     if (!rendererEvents.has(channel)) throw new TypeError(`Unsupported renderer event: ${channel}`)

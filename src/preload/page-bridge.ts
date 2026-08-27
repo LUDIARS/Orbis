@@ -1,5 +1,7 @@
 import { ipcRenderer } from 'electron'
+import { channels } from '../shared/ipc-contract.js'
 import './forma-host.js'
+import { installPageWindowDragging } from './window-drag.js'
 
 /** @implements SPEC-ORBIS-P1-INDAGATIO */
 export function reportPageText(): void {
@@ -9,6 +11,12 @@ export function reportPageText(): void {
 }
 
 reportPageText()
+
+const disposeWindowDragging = installPageWindowDragging(
+  /** @implements SPEC-ORBIS-BORDERLESS-WEBVIEW-DRAG */
+  (input) => ipcRenderer.send(channels.windowDrag, input)
+)
+window.addEventListener('unload', disposeWindowDragging, { once: true })
 
 let trail: { x: number; y: number; at: number }[] | null = null
 let recognized = false

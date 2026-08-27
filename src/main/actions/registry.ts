@@ -1,6 +1,8 @@
 import { curaNew } from './cura-new.js'
 import { fenestraAlwaysOnTopToggle } from './fenestra-always-on-top-toggle.js'
 import { fenestraMinimizeOthers } from './fenestra-minimize-others.js'
+import { fenestraMinimize } from './fenestra-minimize.js'
+import { fenestraMaximizeToggle } from './fenestra-maximize-toggle.js'
 import { fenestraOpacityCycle } from './fenestra-opacity-cycle.js'
 import { pageBack } from './page-back.js'
 import { pageClose } from './page-close.js'
@@ -26,6 +28,8 @@ const actions: Record<ActionId, Action> = {
   'cura.new': curaNew,
   'fenestra.alwaysOnTop.toggle': fenestraAlwaysOnTopToggle,
   'fenestra.minimizeOthers': fenestraMinimizeOthers,
+  'fenestra.minimize': fenestraMinimize,
+  'fenestra.maximize.toggle': fenestraMaximizeToggle,
   'fenestra.opacity.cycle': fenestraOpacityCycle,
   'indagatio.open': indagatioOpen,
   'nexus.layout.toggle': nexusLayoutToggle,

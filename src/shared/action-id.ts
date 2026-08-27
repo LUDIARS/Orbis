@@ -8,6 +8,8 @@ export type ActionId =
   | 'cura.new'
   | 'fenestra.alwaysOnTop.toggle'
   | 'fenestra.minimizeOthers'
+  | 'fenestra.minimize'
+  | 'fenestra.maximize.toggle'
   | 'fenestra.opacity.cycle'
   | 'indagatio.open'
   | 'nexus.layout.toggle'
