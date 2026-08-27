@@ -117,10 +117,11 @@ type ActionId = "page.back" | "page.forward" | "page.close" | "cura.new" | "cura
 ### 4.3 Habitus (用途別スタイル)
 | Habitus | UA | 寸法 | partition | 付随 |
 |---|---|---|---|---|
-| `desktop` (既定) | 標準 | 自由 | `persist:default` | — |
+| `desktop` (既定) | 標準 | 自由 | `persist:desktop` | — |
 | `mobile` | iOS Safari / Android Chrome (選択) | 390x844 等プリセット + DPR | `persist:mobile` | `Emulation.setDeviceMetricsOverride` + touch emulation を debugger API で適用 |
 | `shopping` | 標準 | 自由 | `persist:shopping` | Comparatio パネル ON、Forma(amazon 等) ON |
-- Habitus は Cura 単位に既定を持ち、ページ単位で上書き可。切替は view を作り直さず UA/emulation を再適用して reload。
+- Habitus は Cura 単位に既定を持ち、ページ単位で上書き可。同じ partition 内の切替は view を維持して
+  UA/emulation を再適用し、partition が変わる切替では同じ URL の view を対象 partition で作り直す。
 - Cookie 分離は partition で担保 (買い物用ログインを通常閲覧と混ぜない)。
 
 ### 4.4 Forma (サイト最適化) と Comparatio (比較)
