@@ -407,3 +407,15 @@ Anulus の右クリックメニューと設定ペインから、ビュー単位�
 - Vinculum の `orbis.open` が返す pageSigillum は従来どおり「ページ / WebContentsView 1 つ」に対応する。Umbra にはウインドウがないため、ウインドウ ID を契約へ含めない。
 - 既存の `page` テーブルはそのまま使い、Anulus / Speculum / ページのウインドウ位置とビュー挙動は所有種別と所有 ID をキーにした新テーブルへ持つ (migration 0005)。
 - 保存する位置は display ID と bounds の組にし、復元時に該当 display がなければ最寄りの `workArea` 内へ収める。マルチモニタ構成変更後も画面外へ復元しない。
+
+## 11. Vitrum 表示調整 — Tier 1 採用決定 2026-08-28
+
+ページの最終描画に対する色調・明暗・反転・ブラー等のビュー単位調整として、Vitrum Tier 1 を
+先行実装する。main process で検証した allowlist 形式の `FilterStep` から CSS/SVG フィルタを生成し、
+`webContents.insertCSS` / `removeInsertedCSS` の key を Vitrum が所有する。raw CSS / raw SVG は
+設定値として受け付けず、Forma が所有する注入 CSS のライフサイクルとは分離する。
+
+ビュー設定を Habitus の既定値より優先し、Tabularium へ永続化する。操作は `vitrum.cycle` Action、
+PageControlBar、設定 UI から提供する。詳細な要件・スコープ・完了条件は
+`spec/tasks/2026-08-28-orbis-vitrum-tier1.md` を正本とする。任意 GLSL を扱う Tier 2 は未採用であり、
+技術検証と対象ページ種別の需要確認後に別途判断する。
