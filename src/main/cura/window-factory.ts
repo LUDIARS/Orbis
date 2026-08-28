@@ -26,6 +26,7 @@ import {
   normalizeNavigationUrl
 } from './navigation-url.js'
 import { PageWindowFactory } from './page-window.js'
+import type { VitrumService } from '../vitrum/service.js'
 
 interface CuraPage {
   page: Page
@@ -40,6 +41,7 @@ interface CuraPage {
   llmNavigationPending: boolean
   /** pageSigillum は view ごとに安定 (§7.2)。page.id の再利用や URL 遷移から独立して解決する。 */
   viewKey: string
+  disposeVitrum?: () => void
 }
 
 /** A Cura is a logical owner of independently rendered page windows. */
@@ -80,6 +82,7 @@ export class CuraWindowFactory implements CuraController {
     private readonly habitusService: HabitusService,
     private readonly comparatioService: ComparatioService,
     private readonly formaRegistry: FormaRegistry,
+    private readonly vitrum: VitrumService,
     windowStates?: WindowStateRepository
   ) {
     this.pageWindows = new PageWindowFactory(windowStates)
@@ -319,6 +322,33 @@ export class CuraWindowFactory implements CuraController {
     this.setHabitus(window, next[this.habitusService.getCuraDefault(entry.cura)])
   }
 
+  /** @implements SPEC-ORBIS-VITRUM-APPLY */
+  vitrumState(window: BrowserWindow): import('../../shared/ipc-contract.js').VitrumViewState {
+    const entry = this.entryOf(window)
+    const page = entry && (this.pageForWindow(entry, window) ?? this.activePage(entry))
+    if (!entry || !page) throw new Error('The active page is unavailable.')
+    return this.vitrum.stateFor(page.page.id, page.habitusId)
+  }
+
+  /** @implements SPEC-ORBIS-VITRUM-ACTION */
+  setVitrum(window: BrowserWindow, spec: import('../../shared/ipc-contract.js').VitrumSpecView): import('../../shared/ipc-contract.js').VitrumViewState {
+    const entry = this.entryOf(window)
+    const page = entry && (this.pageForWindow(entry, window) ?? this.activePage(entry))
+    if (!entry || !page) throw new Error('The active page is unavailable.')
+    this.vitrum.savePage(page.page.id, spec)
+    this.vitrum.apply(page.view.webContents, page.page.id, page.habitusId)
+    return this.vitrum.stateFor(page.page.id, page.habitusId)
+  }
+
+  /** @implements SPEC-ORBIS-VITRUM-ACTION */
+  cycleVitrum(window: BrowserWindow): void {
+    const entry = this.entryOf(window)
+    const page = entry && (this.pageForWindow(entry, window) ?? this.activePage(entry))
+    if (!entry || !page) return
+    this.vitrum.cycle(page.page.id, page.habitusId)
+    this.vitrum.apply(page.view.webContents, page.page.id, page.habitusId)
+  }
+
   toggleComparatio(window: BrowserWindow): void {
     const entry = this.entryOf(window)
     if (!entry) return
@@ -542,6 +572,7 @@ export class CuraWindowFactory implements CuraController {
       viewKey: randomUUID()
     }
     entry.pages.push(tab)
+    tab.disposeVitrum = this.vitrum.watch(view.webContents, () => tab.page.id, () => tab.habitusId)
     this.hooks.onPageCreated?.(entry.cura.id, tab.viewKey, view.webContents)
     if (preset.userAgent) view.webContents.setUserAgent(preset.userAgent)
     void applyEmulation(view.webContents, preset).catch((error: unknown) => console.error('Unable to apply initial Habitus emulation.', error))
@@ -606,6 +637,7 @@ export class CuraWindowFactory implements CuraController {
         const wasActive = entry.activeViewId === tab.view.webContents.id
         if (!this.isQuitting && !rendererFailed) this.pageRepository.deactivate(tab.page.id)
         if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
+        tab.disposeVitrum?.()
         entry.pages = entry.pages.filter((candidate) => candidate !== tab)
         this.hooks.onPageClosed?.(entry.cura.id, tab.viewKey)
         if (wasActive) {
@@ -631,7 +663,8 @@ export class CuraWindowFactory implements CuraController {
     if (evicted.length === 0) return
     for (const pageId of evicted) {
       const tab = entry.pages.find((candidate) => candidate.page.id === pageId)
-      if (tab && !tab.view.webContents.isDestroyed()) tab.view.webContents.close()
+    if (tab && !tab.view.webContents.isDestroyed()) tab.view.webContents.close()
+      tab?.disposeVitrum?.()
       if (tab) this.hooks.onPageClosed?.(entry.cura.id, tab.viewKey)
       entry.pages = entry.pages.filter((candidate) => candidate.page.id !== pageId)
     }
@@ -743,6 +776,7 @@ export class CuraWindowFactory implements CuraController {
     tab.window = undefined
     previousWindow?.destroy()
     if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
+    tab.disposeVitrum?.()
     this.hooks.onPageClosed?.(entry.cura.id, tab.viewKey)
     entry.pages = entry.pages.filter((candidate) => candidate !== tab)
     this.createPage(

@@ -20,6 +20,7 @@ export interface CuraController {
   setHabitus(window: BrowserWindow, id: HabitusId): void
   toggleComparatio(window: BrowserWindow): void
   cycleHabitus(window: BrowserWindow): void
+  cycleVitrum(window: BrowserWindow): void
 }
 
 /** Rota Action が触れるオーバーレイ操作面。 */

@@ -1,16 +1,17 @@
 import { useEffect, useState, type FormEvent, type ReactElement } from 'react'
-import type { FenestraViewState, SigillumViewState } from '../../shared/ipc-contract'
+import type { FenestraViewState, SigillumViewState, VitrumViewState } from '../../shared/ipc-contract'
 import type { NavigationMode } from '../../shared/navigation-intent'
 import styles from './PageControlBar.module.css'
 import { useWindowDrag } from './useWindowDrag'
 
-/** @implements SPEC-ORBIS-BORDERLESS-CONTROL-MENU */
+/** @implements SPEC-ORBIS-BORDERLESS-CONTROL-MENU SPEC-ORBIS-VITRUM-ACTION */
 export function PageControlBar(): ReactElement {
   const [isOpen, setOpen] = useState(false)
   const [value, setValue] = useState('')
   const [mode, setMode] = useState<NavigationMode>('auto')
   const [sigillum, setSigillum] = useState<SigillumViewState>({ browser: null, page: null })
   const [fenestra, setFenestra] = useState<FenestraViewState>({ alwaysOnTop: false, opacity: 1 })
+  const [vitrum, setVitrum] = useState<VitrumViewState | null>(null)
   const barDrag = useWindowDrag(undefined, true)
   const controlDrag = useWindowDrag(() => setOpen((open) => !open))
 
@@ -24,6 +25,7 @@ export function PageControlBar(): ReactElement {
       const disposeFenestra = window.orbis.on('orbis:fenestra-state', setFenestra)
       window.orbis.ready()
       void window.orbis.sigillum().then(setSigillum)
+      void window.orbis.vitrum().then(setVitrum)
       return () => { disposePages(); disposeFenestra() }
     },
     []
@@ -39,6 +41,9 @@ export function PageControlBar(): ReactElement {
       <button type="button" onClick={() => window.orbis.action('page.back')} aria-label="戻る">←</button>
       <button type="button" onClick={() => window.orbis.action('page.forward')} aria-label="進む">→</button>
       <button type="button" onClick={() => window.orbis.action('page.reload')} aria-label="再読み込み">↻</button>
+      <select aria-label="表示フィルタ" value={vitrum?.spec.id ?? 'none'} onChange={(event) => { const id = event.target.value; void window.orbis.setVitrum({ id, filters: [] }).then(setVitrum) }}>
+        {(vitrum?.presets ?? ['none']).map((preset) => <option key={preset} value={preset}>{preset}</option>)}
+      </select>
       <input aria-label="URL または検索語" value={value} onChange={(event) => setValue(event.target.value)} placeholder="URL / 検索" />
       <select aria-label="移動モード" value={mode} onChange={(event) => setMode(event.target.value as NavigationMode)}>
         <option value="auto">自動</option><option value="url">URL</option><option value="search">検索</option>

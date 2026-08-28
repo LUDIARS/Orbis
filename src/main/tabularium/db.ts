@@ -6,6 +6,7 @@ import productFactsSql from './migrations/0002_product_facts.sql?raw'
 import sigillumSql from './migrations/0003_sigillum.sql?raw'
 import sigillumActiveSql from './migrations/0004_sigillum_active.sql?raw'
 import windowStateSql from './migrations/0005_window_state.sql?raw'
+import vitrumSql from './migrations/0006_vitrum.sql?raw'
 
 export type TabulariumDb = DatabaseSync
 
@@ -37,6 +38,7 @@ export function openDatabase(file = join(app.getPath('userData'), 'orbis.sqlite'
     if (version.user_version < 3) applyMigration(database, sigillumSql, 3)
     if (version.user_version < 4) applyMigration(database, sigillumActiveSql, 4)
     if (version.user_version < 5) applyMigration(database, windowStateSql, 5)
+    if (version.user_version < 6) applyMigration(database, vitrumSql, 6)
     return database
   } catch (error) {
     database.close()

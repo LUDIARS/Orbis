@@ -40,7 +40,9 @@ export const channels = {
   anulusState: 'orbis:anulus-state',
   speculumSelect: 'orbis:speculum-select',
   speculumToggle: 'orbis:speculum-toggle',
-  windowDrag: 'orbis:window-drag'
+  windowDrag: 'orbis:window-drag',
+  vitrum: 'orbis:vitrum',
+  vitrumSet: 'orbis:vitrum-set'
 } as const
 
 export type WindowDragPhase = 'begin' | 'move' | 'end'
@@ -64,6 +66,9 @@ export interface FenestraViewState {
   alwaysOnTop: boolean
   opacity: number
 }
+export interface VitrumFilterStep { kind: 'brightness' | 'contrast' | 'saturate' | 'hue-rotate' | 'invert' | 'sepia' | 'grayscale' | 'blur'; value: number }
+export interface VitrumSpecView { id: string; filters: VitrumFilterStep[] }
+export interface VitrumViewState { spec: VitrumSpecView; presets: readonly string[] }
 export interface GraphNodeView { id: string; url: string; title: string; lastVisit: string; umbra?: boolean }
 export interface GraphEdgeView { from: string; to: string; kind: 'navigate' | 'newview' | 'llm' | 'explore'; count: number; lastAt: string }
 /** @implements SPEC-ORBIS-P5-SIGILLUM */
@@ -154,6 +159,8 @@ export interface OrbisBridge {
   speculumSelect(pageId: string): void
   speculumToggle(): void
   windowDrag(input: WindowDragInput): void
+  vitrum(): Promise<VitrumViewState>
+  setVitrum(spec: VitrumSpecView): Promise<VitrumViewState>
   ready(): void
   on<K extends RendererEventName>(channel: K, listener: (value: RendererEventMap[K]) => void): () => void
 }

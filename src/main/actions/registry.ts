@@ -17,6 +17,7 @@ import { habitusSetShopping } from './habitus-set-shopping.js'
 import { comparatioToggle } from './comparatio-toggle.js'
 import { habitusCycle } from './habitus-cycle.js'
 import { rotaOpen } from './rota-open.js'
+import { vitrumCycle } from './vitrum-cycle.js'
 import type { Action, ActionContext, ActionId } from './types.js'
 
 const actions: Record<ActionId, Action> = {
@@ -38,7 +39,8 @@ const actions: Record<ActionId, Action> = {
   'habitus.set:shopping': habitusSetShopping,
   'comparatio.toggle': comparatioToggle,
   'habitus.cycle': habitusCycle,
-  'rota.open': rotaOpen
+  'rota.open': rotaOpen,
+  'vitrum.cycle': vitrumCycle
 }
 
 /** @implements SPEC-ORBIS-P0-ACTIONS */

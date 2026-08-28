@@ -19,3 +19,4 @@ export type ActionId =
   | 'comparatio.toggle'
   | 'habitus.cycle'
   | 'rota.open'
+  | 'vitrum.cycle'

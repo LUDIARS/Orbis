@@ -49,8 +49,11 @@ import { SpeculumWindow } from '../speculum/window.js'
 import { WindowStateRepository } from '../tabularium/repositories/window-state-repo.js'
 import { channels } from '../ipc/channels.js'
 import { registerWindowDragHandler } from '../ipc/handlers/register-window-drag-handler.js'
+import { VitrumRepository } from '../tabularium/repositories/vitrum-repo.js'
+import { VitrumService } from '../vitrum/service.js'
+import { registerVitrumHandler } from '../ipc/handlers/register-vitrum-handler.js'
 
-/** @implements SPEC-ORBIS-P0-RADIX SPEC-ORBIS-P3-CLAVIS SPEC-ORBIS-P3-GESTUS SPEC-ORBIS-P3-SETTINGS SPEC-ORBIS-P4-ROTA SPEC-ORBIS-P4-OVERLAY SPEC-ORBIS-P7-START-SCREEN SPEC-ORBIS-P8-ANULUS SPEC-ORBIS-P8-SPECULUM SPEC-ORBIS-BORDERLESS-WINDOW-DRAG */
+/** @implements SPEC-ORBIS-P0-RADIX SPEC-ORBIS-P3-CLAVIS SPEC-ORBIS-P3-GESTUS SPEC-ORBIS-P3-SETTINGS SPEC-ORBIS-P4-ROTA SPEC-ORBIS-P4-OVERLAY SPEC-ORBIS-P7-START-SCREEN SPEC-ORBIS-P8-ANULUS SPEC-ORBIS-P8-SPECULUM SPEC-ORBIS-BORDERLESS-WINDOW-DRAG SPEC-ORBIS-VITRUM-APPLY */
 export async function bootstrap(): Promise<void> {
   if (!app.requestSingleInstanceLock()) {
     app.quit()
@@ -80,6 +83,7 @@ export async function bootstrap(): Promise<void> {
   const pageRepository = new PageRepository(db)
   const curaRepository = new CuraRepository(db)
   const habitusService = new HabitusService(db)
+  const vitrumService = new VitrumService(new VitrumRepository(db))
   const comparatioService = new ComparatioService(db)
   const graphStore = new GraphStore()
   const service = new CuraService(curaRepository)
@@ -138,7 +142,7 @@ export async function bootstrap(): Promise<void> {
       const anulusWindow = anulus.windowForIpc()
       if (anulusWindow && !anulusWindow.webContents.isDestroyed()) anulusWindow.webContents.send(channels.anulusState, factory.anulusSnapshot())
     }
-  }, graphStore, habitusService, comparatioService, new FormaRegistry([amazonForma, googleForma]), windowStates)
+  }, graphStore, habitusService, comparatioService, new FormaRegistry([amazonForma, googleForma]), vitrumService, windowStates)
 
   const resolveWindow = (senderId: number): BrowserWindow | undefined => factory.resolveUiWindow(senderId)
   const resolveAnyWindow = (senderId: number): BrowserWindow | undefined => factory.resolveWindow(senderId)
@@ -194,7 +198,8 @@ export async function bootstrap(): Promise<void> {
         page: sigillumService.forPage(info.curaId, info.pageId)
       }
     }),
-    registerWindowDragHandler(resolveAnyWindow)
+    registerWindowDragHandler(resolveAnyWindow),
+    registerVitrumHandler(resolveWindow, (window) => factory.vitrumState(window), (window, spec) => factory.setVitrum(window, spec))
   ]
   /** @implements SPEC-ORBIS-P8-ANULUS Only the Anulus renderer may create a Cura from shell input. */
   const openFromAnulus = (event: Electron.IpcMainEvent, payload: unknown): void => {
