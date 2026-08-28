@@ -1,26 +1,33 @@
+@import '../ui-tokens.css';
+@property --control-glow { syntax: '<number>'; inherits: false; initial-value: 0; }
 .bar {
+  position: relative;
   width: 100%;
   height: 42px;
   display: flex;
   justify-content: flex-end;
   align-items: center;
   box-sizing: border-box;
-  color: #e9f1ff;
-  background: linear-gradient(90deg, rgba(12, 19, 31, 0.74), rgba(24, 34, 53, 0.96));
-  font-family: system-ui, sans-serif;
+  color: var(--orbis-text);
+  background: linear-gradient(90deg, var(--orbis-surface-muted), var(--orbis-surface-strong));
+  font-family: var(--orbis-font);
+  backdrop-filter: blur(14px) saturate(135%);
+  transition: --control-glow .2s ease, background .2s ease, box-shadow .2s ease;
   user-select: none;
   touch-action: none;
 }
 
-.bar:not(.open) { background: linear-gradient(90deg, rgba(12, 19, 31, 0.34), rgba(24, 34, 53, 0.94)); }
+.bar:not(.open) { background: linear-gradient(90deg, rgba(12, 19, 31, 0.34), var(--orbis-surface-strong)); }
+.bar.open { --control-glow: 1; box-shadow: 0 6px 20px rgba(61, 155, 255, calc(.14 * var(--control-glow))); }
 
 .menu {
   min-width: 0;
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding-left: 7px;
+  z-index: 1;
+  gap: var(--orbis-space-xs);
+  padding-left: var(--orbis-space-sm);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
@@ -31,17 +38,17 @@
 
 .menu button, .menu select, .menu input {
   height: 28px;
-  border: 1px solid #526781;
-  border-radius: 6px;
-  color: #e9f1ff;
-  background: #26364e;
+  border: 1px solid var(--orbis-border);
+  border-radius: var(--orbis-radius-sm);
+  color: var(--orbis-text);
+  background: var(--orbis-surface-strong);
 }
 
 .menu button { min-width: 30px; cursor: pointer; }
 .menu input { min-width: 80px; flex: 1; padding: 0 8px; }
-.menu output { max-width: 72px; overflow: hidden; font-size: 11px; color: #9fb2c9; }
-.menu button[aria-pressed='true'] { color: #ffe28a; border-color: #c8a546; }
-.menu .close:hover { background: #b33b4a; border-color: #d85d6b; }
+.menu output { max-width: 72px; overflow: hidden; font-size: 11px; color: var(--orbis-text-muted); }
+.menu button[aria-pressed='true'] { color: var(--orbis-warning); border-color: var(--orbis-warning); }
+.menu .close:hover { background: var(--orbis-danger); border-color: var(--orbis-danger); }
 
 .control {
   width: 42px;
@@ -49,11 +56,12 @@
   flex: 0 0 42px;
   border: 0;
   border-left: 1px solid rgba(124, 151, 183, 0.35);
-  color: #dbe8f8;
-  background: rgba(31, 45, 67, 0.94);
+  z-index: 1;
+  color: var(--orbis-text);
+  background: var(--orbis-surface-strong);
   cursor: grab;
   touch-action: none;
 }
 
 .control:active { cursor: grabbing; }
-.control:hover { background: #344b6d; }
+.control:hover { background: rgba(65, 99, 144, .92); }

@@ -11,4 +11,5 @@ export const vitrumPresets: readonly VitrumPreset[] = [
   { id: 'sepia-paper', filters: [{ kind: 'sepia', value: 0.65 }, { kind: 'saturate', value: 0.75 }, { kind: 'brightness', value: 1.05 }] }
 ]
 
+/** @implements SPEC-ORBIS-VITRUM-PRESETS */
 export function presetById(id: string): VitrumPreset | undefined { return vitrumPresets.find((preset) => preset.id === id) }

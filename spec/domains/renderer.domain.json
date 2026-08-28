@@ -1,1 +1,1 @@
-{"name":"renderer","description":"Cura のアドレスバーとページタブ UI。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/renderer/(?!Rota/|rota(?:\\.html|\\.tsx)$)(?:.*/)?[^/]+$"}]}
+{"name":"renderer","description":"Cura のアドレスバーとページタブ UI。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/renderer/(?!Rota/|shader/|rota(?:\\.html|\\.tsx)$)(?:.*/)?[^/]+$"}]}

@@ -1,0 +1,11 @@
+@import './ui-tokens.css';
+
+@property --anulus-glow { syntax: '<number>'; inherits: true; initial-value: .34; }
+.anulus { position: relative; width: 100vw; height: 100vh; overflow: hidden; border-radius: 50%; color: var(--orbis-text); background: radial-gradient(circle, rgba(42, 71, 114, .75), var(--orbis-surface-muted)); box-shadow: inset 0 0 0 1px var(--orbis-border), var(--orbis-shadow); font-family: var(--orbis-font); display: grid; place-items: center; transition: --anulus-glow .2s ease; -webkit-app-region: drag; }
+.anulus:hover { --anulus-glow: .58; }
+.form { z-index: 1; width: 76%; display: grid; gap: var(--orbis-space-sm); -webkit-app-region: no-drag; backdrop-filter: blur(14px) saturate(130%); transition: filter .2s ease; }
+.form:hover { filter: drop-shadow(0 0 calc(14px * var(--anulus-glow)) rgba(104, 195, 255, .7)); }
+.curaList { display: flex; gap: var(--orbis-space-xs); overflow-x: auto; }
+.form button, .form input { border: 1px solid var(--orbis-border); border-radius: var(--orbis-radius-sm); color: var(--orbis-text); background: var(--orbis-surface-strong); font: inherit; }
+.form input { padding: var(--orbis-space-sm); }
+.page { position: absolute; z-index: 1; width: 28px; height: 28px; border-radius: 50%; -webkit-app-region: no-drag; }

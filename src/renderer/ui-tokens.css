@@ -1,0 +1,18 @@
+:root {
+  --orbis-surface: rgba(16, 27, 48, 0.78);
+  --orbis-surface-strong: rgba(25, 42, 71, 0.9);
+  --orbis-surface-muted: rgba(11, 19, 34, 0.62);
+  --orbis-text: #e9f1ff;
+  --orbis-text-muted: #aebfd8;
+  --orbis-border: rgba(139, 177, 221, 0.38);
+  --orbis-accent: #8dcbff;
+  --orbis-warning: #ffe28a;
+  --orbis-danger: #d85d6b;
+  --orbis-radius-sm: 8px;
+  --orbis-radius-md: 14px;
+  --orbis-space-xs: 4px;
+  --orbis-space-sm: 8px;
+  --orbis-space-md: 14px;
+  --orbis-shadow: 0 10px 28px rgba(2, 8, 20, 0.35);
+  --orbis-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}

@@ -1,0 +1,4 @@
+@import './ui-tokens.css';
+.shell { width: 100%; height: 100%; color: var(--orbis-text); background: var(--orbis-surface-muted); font-family: var(--orbis-font); }
+.header { height: 24px; box-sizing: border-box; padding: 4px 10px; color: var(--orbis-text); background: var(--orbis-surface); backdrop-filter: blur(10px); -webkit-app-region: drag; }
+.graph { -webkit-app-region: no-drag; }

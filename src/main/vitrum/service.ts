@@ -21,7 +21,7 @@ export class VitrumService {
     if (typeof id !== 'string' || id.length < 1 || id.length > 64) throw new TypeError('Vitrum id must be 1 to 64 characters.')
     const preset = presetById(id)
     const parsedFilters = validateFilters(filters)
-    const spec = preset && parsedFilters.length === 0
+    const spec = preset
       ? { id: preset.id, filters: preset.filters }
       : { id, filters: parsedFilters }
     if (encoder.encode(JSON.stringify(spec)).byteLength > maxJsonBytes) throw new RangeError('Vitrum spec exceeds 16 KiB.')
@@ -47,6 +47,7 @@ export class VitrumService {
     return this.savePage(pageId, next)
   }
   apply(webContents: WebContents, pageId: string, habitusId: string): void {
+    if (webContents.isDestroyed()) return
     const state = this.views.get(webContents.id) ?? { key: null, request: 0, disposed: false }
     this.views.set(webContents.id, state)
     const request = ++state.request
@@ -56,19 +57,30 @@ export class VitrumService {
       const previous = state.key
       state.key = key
       if (previous) await webContents.removeInsertedCSS(previous)
-    }).catch(() => undefined)
+    }).catch(() => undefined) // Navigation or destruction can invalidate best-effort CSS replacement.
   }
   watch(webContents: WebContents, pageId: () => string, habitusId: () => string): () => void {
     const reapply = (): void => this.apply(webContents, pageId(), habitusId())
+    let disposed = false
+    const dispose = (): void => {
+      if (disposed) return
+      disposed = true
+      webContents.removeListener('did-finish-load', reapply)
+      webContents.removeListener('destroyed', dispose)
+      this.dispose(webContents)
+    }
     webContents.on('did-finish-load', reapply)
-    return () => { webContents.removeListener('did-finish-load', reapply); this.dispose(webContents) }
+    webContents.once('destroyed', dispose)
+    return dispose
   }
   dispose(webContents: WebContents): void {
     const state = this.views.get(webContents.id)
     if (!state) return
     state.disposed = true
     this.views.delete(webContents.id)
-    if (state.key && !webContents.isDestroyed()) void webContents.removeInsertedCSS(state.key).catch(() => undefined)
+    if (state.key && !webContents.isDestroyed()) {
+      void webContents.removeInsertedCSS(state.key).catch(() => undefined) // The view may be destroyed between the guard and removal.
+    }
   }
   private resolve(pageId: string, habitusId: string): VitrumSpec {
     return this.read('page', pageId) ?? this.read('habitus', habitusId) ?? presetById('none')!

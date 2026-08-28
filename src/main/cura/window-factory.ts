@@ -508,6 +508,7 @@ export class CuraWindowFactory implements CuraController {
     }
   }
 
+  /** @implements SPEC-ORBIS-P0-CURA SPEC-ORBIS-VITRUM-APPLY */
   private createPage(
     entry: CuraEntry,
     value: string,
@@ -615,7 +616,7 @@ export class CuraWindowFactory implements CuraController {
     return tab
   }
 
-  /** @implements SPEC-ORBIS-P8-PAGE-WINDOW Creates the control-bar host only when a page becomes visible. */
+  /** @implements SPEC-ORBIS-P8-PAGE-WINDOW SPEC-ORBIS-VITRUM-APPLY Creates the control-bar host only when a page becomes visible. */
   private attachPageWindow(entry: CuraEntry, tab: CuraPage): void {
     if (tab.window && !tab.window.isDestroyed()) return
     let window: BrowserWindow
@@ -657,19 +658,20 @@ export class CuraWindowFactory implements CuraController {
     this.hooks.onGraphChanged?.(entry.cura.id, state)
   }
 
-  /** @implements SPEC-ORBIS-P5-UMBRA 上限超過の Umbra view を古い順に閉じる。page 行と Nexus ノードは残す。 */
+  /** @implements SPEC-ORBIS-P5-UMBRA SPEC-ORBIS-VITRUM-APPLY 上限超過の Umbra view を古い順に閉じる。page 行と Nexus ノードは残す。 */
   private enforceUmbraCap(entry: CuraEntry): void {
     const evicted = selectUmbraEvictions(entry.pages.filter((tab) => tab.umbra).map((tab) => ({ pageId: tab.page.id, lastVisit: tab.page.lastVisit })))
     if (evicted.length === 0) return
     for (const pageId of evicted) {
       const tab = entry.pages.find((candidate) => candidate.page.id === pageId)
-    if (tab && !tab.view.webContents.isDestroyed()) tab.view.webContents.close()
+      if (tab && !tab.view.webContents.isDestroyed()) tab.view.webContents.close()
       tab?.disposeVitrum?.()
       if (tab) this.hooks.onPageClosed?.(entry.cura.id, tab.viewKey)
       entry.pages = entry.pages.filter((candidate) => candidate.page.id !== pageId)
     }
   }
 
+  /** @implements SPEC-ORBIS-P0-CURA SPEC-ORBIS-VITRUM-APPLY */
   private commitNavigation(entry: CuraEntry, tab: CuraPage, nextUrl: string): void {
     if (!isAllowedNavigationUrl(nextUrl)) return
     const now = new Date().toISOString()
@@ -725,6 +727,8 @@ export class CuraWindowFactory implements CuraController {
     const resolvedPage = existingPage ? { ...existingPage, lastVisit: now, umbra: tab.umbra } : nextPage
     this.pageRepository.recordNavigation(entry.cura.id, previousPage.id, resolvedPage, followKind, !existingPage)
     tab.page = resolvedPage
+    // Same-document navigations do not emit did-finish-load, so resolve the new page's filter here too.
+    this.vitrum.apply(tab.view.webContents, tab.page.id, tab.habitusId)
     this.updateGraph(entry, resolvedPage, resolveNavigationParent(true, previousPage.id, null), followKind)
     this.sendPages(entry)
     this.sendGraph(entry)
@@ -769,6 +773,7 @@ export class CuraWindowFactory implements CuraController {
     for (const tab of entry.pages) if (tab.window && !tab.window.webContents.isDestroyed()) tab.window.webContents.send(channels.comparatio, { open: entry.comparatioOpen, products: this.comparatioService.list(entry.cura.id) })
   }
 
+  /** @implements SPEC-ORBIS-P2-HABITUS SPEC-ORBIS-VITRUM-APPLY */
   private recreatePageForPartition(entry: CuraEntry, tab: CuraPage, habitusId: HabitusId): void {
     const wasActive = this.activePage(entry) === tab
     const previousWindow = tab.window

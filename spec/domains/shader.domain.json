@@ -1,0 +1,1 @@
+{"name":"shader","description":"Orbis renderer の WebGL2 装飾レイヤと描画ライフサイクル。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/renderer/shader/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)test/shader-.*\\.test\\.ts$"}]}

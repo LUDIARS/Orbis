@@ -6,7 +6,7 @@ import { RotaSearch } from './RotaSearch'
 import styles from './RotaApp.module.css'
 import { nextWheelItemId } from './wheel-layout'
 
-/** @implements SPEC-ORBIS-P4-ROTA SPEC-ORBIS-P4-OVERLAY */
+/** @implements SPEC-ORBIS-P4-ROTA SPEC-ORBIS-P4-OVERLAY SPEC-ORBIS-UIRICH-TOKENS */
 export function RotaApp(): ReactElement {
   const [snapshot, setSnapshot] = useState<RotaSnapshot>({ curas: [] })
   const [selectedId, setSelectedId] = useState<string | null>(null)
