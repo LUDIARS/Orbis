@@ -50,6 +50,7 @@
     { "glob": "src/main/vinculum/*", "layer": "infrastructure" },
     { "glob": "src/main/vinculum/tools/*", "layer": "infrastructure" },
 
+    { "glob": "electron.vite.config.ts", "layer": "shared" },
     { "glob": "src/shared/*", "layer": "shared" },
     { "glob": "test/*", "layer": "shared" }
   ],
