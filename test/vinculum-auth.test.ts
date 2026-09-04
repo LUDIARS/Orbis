@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { bearerToken, clientIdHeader, createOrLoadToken, hasValidToken, isLoopback } from '../src/main/vinculum/auth.js'
+import { bearerToken, clientIdHeader, createOrLoadToken, hasValidToken, instanceIdHeader, isLoopback } from '../src/main/vinculum/auth.js'
 
 describe('vinculum auth', () => {
   it('creates the token once and reloads the same value', () => {
@@ -53,6 +53,14 @@ describe('vinculum auth', () => {
     expect(clientIdHeader('contains spaces')).toBeUndefined()
     expect(clientIdHeader(['duplicate', 'headers'])).toBeUndefined()
     expect(clientIdHeader('a'.repeat(129))).toBeUndefined()
+  })
+
+  it('accepts only bounded instance identifiers with a header-safe syntax', () => {
+    expect(instanceIdHeader('550e8400-e29b-41d4-a716-446655440000')).toBe('550e8400-e29b-41d4-a716-446655440000')
+    expect(instanceIdHeader('')).toBeUndefined()
+    expect(instanceIdHeader('contains spaces')).toBeUndefined()
+    expect(instanceIdHeader(['duplicate', 'headers'])).toBeUndefined()
+    expect(instanceIdHeader('a'.repeat(129))).toBeUndefined()
   })
 
   it('accepts only loopback addresses', () => {

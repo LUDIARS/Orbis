@@ -6,7 +6,10 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod'
 import type { SigillumService } from '../sigillum/service.js'
 import { AuditLog } from './audit.js'
-import { bearerToken, clientIdHeader, hasValidToken, isLoopback } from './auth.js'
+import { bearerToken, clientIdHeader, hasValidToken, instanceIdHeader, isLoopback } from './auth.js'
+import type { PeerVerdict } from './peer-verification.js'
+import { verifyConcordiaPeer, type VerifyPeerOptions } from './peer-verification.js'
+import type { VinculumAccessLog } from './access-log.js'
 import type { VinculumOperations } from './operations.js'
 import { attach } from './tools/attach.js'
 import { detach } from './tools/detach.js'
@@ -23,6 +26,7 @@ const sigillumField = { sigillum: z.string().min(1) }
 const result = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] })
 const MAX_REQUEST_BODY_BYTES = 1024 * 1024
 const CLIENT_ID_HEADER = 'x-orbis-client-id'
+const INSTANCE_ID_HEADER = 'x-orbis-instance-id'
 
 class RequestBodyTooLargeError extends Error {}
 
@@ -40,15 +44,31 @@ function explorationSigilla(value: unknown): string[] {
   return [...new Set(sigilla)]
 }
 
-/** @implements SPEC-ORBIS-P5-VINCULUM loopback + 共有トークン限定の MCP エンドポイント。Excubitor 照合は P6 (Cc 側 PR と同時に有効化)。 */
+/**
+ * @implements SPEC-ORBIS-P5-VINCULUM loopback + 共有トークン限定の MCP エンドポイント。
+ * @implements SPEC-ORBIS-P6-VINCULUM-PEER Excubitor service_detail による接続元照合 (既定 OFF)。
+ */
 export class VinculumServer {
   private server: Server | undefined
-  constructor(private readonly token: string, private readonly seals: SigillumService, private readonly audit: AuditLog, private readonly operations: VinculumOperations) {}
+  constructor(
+    private readonly token: string,
+    private readonly seals: SigillumService,
+    private readonly audit: AuditLog,
+    private readonly operations: VinculumOperations,
+    private readonly access: VinculumAccessLog,
+    /**
+     * 照合を有効にするかは毎リクエスト読む。 設定を切り替えるたびに Orbis を
+     * 再起動させると、Cc 側 PR を入れた直後の切り替えが確認しづらい。
+     */
+    private readonly verificationEnabled: () => boolean = () => false,
+    private readonly verifyOptions: VerifyPeerOptions = {}
+  ) {}
 
   async start(configDir: string): Promise<number> {
     if (this.server) throw new Error('Vinculum is already started.')
     const server = createServer(async (request, response) => {
-      if (!this.authorized(request)) { response.writeHead(401).end(); return }
+      const verdict = await this.authorize(request)
+      if (!verdict.allowed) { response.writeHead(401).end(); return }
       try {
         const body = await this.body(request)
         // stateless モード: SDK の作法どおりリクエストごとに transport / server を作る。
@@ -159,9 +179,46 @@ export class VinculumServer {
     }
   }
 
-  private authorized(request: IncomingMessage): boolean {
-    // Process-level proof is advisory until Concordia publishes its service_detail contract.
-    return isLoopback(request.socket.remoteAddress) && hasValidToken(bearerToken(request.headers.authorization), this.token)
+  /**
+   * @implements SPEC-ORBIS-P6-VINCULUM-PEER
+   * loopback → 共有トークン → Excubitor 照合 の順。 前二つは接続元を見ないので
+   * 落ちた時点で Excubitor を呼ばない (拒否のたびに外部 HTTP を叩かせない)。
+   */
+  private async authorize(request: IncomingMessage): Promise<PeerVerdict> {
+    const clientId = clientIdHeader(request.headers[CLIENT_ID_HEADER])
+    if (!isLoopback(request.socket.remoteAddress)) return this.recordAccess({ allowed: false, reason: 'not-loopback', enforced: true }, clientId)
+    if (!hasValidToken(bearerToken(request.headers.authorization), this.token)) {
+      return this.recordAccess({ allowed: false, reason: 'invalid-token', enforced: true }, clientId)
+    }
+    let enabled: boolean
+    try {
+      enabled = this.verificationEnabled()
+    } catch {
+      // 設定を読めなければ照合を無効扱いにせず、認証済みリクエストも fail-closed にする。
+      // DB 例外にはローカルパスが含まれ得るので、詳細は出さず判定理由を監査ログへ残す。
+      console.error('Unable to read the Vinculum peer-verification setting.')
+      return this.recordAccess({ allowed: false, reason: 'verification-config-unavailable', enforced: true }, clientId)
+    }
+    const verdict = await verifyConcordiaPeer(
+      enabled,
+      instanceIdHeader(request.headers[INSTANCE_ID_HEADER]),
+      this.verifyOptions
+    )
+    return this.recordAccess(verdict, clientId)
+  }
+
+  /**
+   * @implements SPEC-ORBIS-P6-VINCULUM-PEER
+   * 監査は best-effort。 記録に失敗しても可否そのものは変えない。
+   */
+  private recordAccess(verdict: PeerVerdict, clientId: string | undefined): PeerVerdict {
+    try {
+      this.access.record(verdict, clientId)
+    } catch {
+      // DB 例外にはローカルパスが含まれ得るため、best-effort 監査の失敗詳細は出さない。
+      console.error('Unable to record the Vinculum access decision.')
+    }
+    return verdict
   }
 
   private async body(request: IncomingMessage): Promise<unknown> {

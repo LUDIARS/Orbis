@@ -238,6 +238,34 @@ Orbis/
   - loopback 以外は bind しない
   - Cc がヘルスチェック時に提示する共有トークン (Cc の設定 UI/DB 1 系統から発行、env には置かない) を必須
   - 接続元プロセスが Excubitor 管理下の Concordia であることを Excubitor `service_detail` で照合 (照合不能なら拒否)
+
+#### SPEC-ORBIS-P6-VINCULUM-PEER: 接続元照合の段取り (既定 OFF)
+
+照合は Cc が自分の Excubitor `instance_id` を `x-orbis-instance-id` で名乗り、
+Orbis が Excubitor `GET /api/v1/services/concordia` の `instance_id` と突き合わせる形で行う。
+
+**既定は OFF** (neco 判断 2026-09-04)。 名乗る側は Cc の変更で入るため、
+先に fail-closed を既定にすると、まだ名乗っていない Cc からの接続が全部 401 になり
+Cc ↔ Orbis のリンクが切れる。 Cc 側が入ってから `vinculum_config` の
+`excubitor_verification` を `'on'` にする。 `'on'` 以外の値と未設定は OFF —
+設定ミスで黙って fail-closed に倒れると、原因が 401 だけから読み取れない。
+
+ON のときは **照合不能も拒否**する。 Excubitor に届かない・Concordia が
+`running` でない・`instance_id` を持たない・値が食い違う、のいずれも
+「Excubitor 管理下であることを確認できない」であり、確認できないものを通すなら
+照合を入れる意味が無い。
+
+判定は `vinculum_access_log` (migration 0007) に残す。 `sigillum_log` は
+sigillum への外部キーを持つので、まだ sigillum を持たない「接続を拒否した」記録を
+入れられない。 拒否が残らないと、照合が効いているのか誰も接続していないだけなのかを
+後から区別できない。 残すのは判定・理由・client id だけで、提示された instance_id や
+トークンは残さない。認証前のローカル要求による無制限な DB 増加を避けるため、
+直近 10,000 件を保持する。
+
+接続先 origin は Excubitor / ProcessMap 側が env (`ORBIS_EXCUBITOR_URL` / `EXCUBITOR_URL`)
+で渡し、Orbis 側にはポートを複製しない。path/query/credential を含む値と未設定は
+照合不能として拒否する。
+prefix は `/api/v1/` — `/v1/` と `/api/` は 404 (2026-09-04 実測)。
   - OpenAPI/MCP manifest を外部に出さない。Corpus/Hub には登録しない
 - ツール群 (MCP tool、全て `sigillum` 引数必須):
 

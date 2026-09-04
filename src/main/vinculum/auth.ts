@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/
 const CLIENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+const INSTANCE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 
 export function createOrLoadToken(db: DatabaseSync): string {
   const stored = db.prepare("SELECT value FROM vinculum_config WHERE key = 'token'").get() as { value?: string } | undefined
@@ -21,6 +22,14 @@ export function bearerToken(authorization: string | undefined): string | undefin
 }
 export function clientIdHeader(value: string | string[] | undefined): string | undefined {
   return typeof value === 'string' && CLIENT_ID_PATTERN.test(value) ? value : undefined
+}
+/**
+ * 接続元が名乗る Excubitor instance_id。 Excubitor の記録と照合するだけの値なので
+ * 形だけ検証し、正しさの判断は peer-verification に任せる。
+ * @implements SPEC-ORBIS-P6-VINCULUM-PEER
+ */
+export function instanceIdHeader(value: string | string[] | undefined): string | undefined {
+  return typeof value === 'string' && INSTANCE_ID_PATTERN.test(value) ? value : undefined
 }
 export function hasValidToken(actual: string | undefined, expected: string): boolean {
   if (!actual) return false

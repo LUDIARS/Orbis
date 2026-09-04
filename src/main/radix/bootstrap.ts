@@ -37,6 +37,8 @@ import { RotaOverlayWindow } from '../rota/overlay-window.js'
 import { SigillumService } from '../sigillum/service.js'
 import { AuditLog } from '../vinculum/audit.js'
 import { createOrLoadToken } from '../vinculum/auth.js'
+import { VinculumAccessLog } from '../vinculum/access-log.js'
+import { verificationEnabled } from '../vinculum/peer-verification.js'
 import { OrbisVinculumOperations } from '../vinculum/orbis-operations.js'
 import { VinculumServer } from '../vinculum/server.js'
 import { registerSigillumHandler } from '../ipc/handlers/register-sigillum-handler.js'
@@ -273,7 +275,11 @@ export async function bootstrap(): Promise<void> {
     createOrLoadToken(db),
     sigillumService,
     auditLog,
-    new OrbisVinculumOperations(sigillumService, factory, pageRepository)
+    new OrbisVinculumOperations(sigillumService, factory, pageRepository),
+    new VinculumAccessLog(db),
+    // Excubitor 照合は既定 OFF。 Cc が instance_id を名乗るようになってから
+    // vinculum_config の excubitor_verification を 'on' にする (§7.3 R12)。
+    () => verificationEnabled(db)
   )
   void vinculum.start(app.getPath('userData'))
     .then((port) => console.log(`Vinculum is listening on 127.0.0.1:${port}`))
