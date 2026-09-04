@@ -1,0 +1,58 @@
+{
+  "$comment": "Anatomia のプログラムドメイン (二層判定) 用の層宣言。 glob は repo 相対のファイルパスへ完全一致で当たる (`*` = 1 階層、 `**` = 任意階層)。 ローダーが glob 文字列でソートしてから先勝ちで評価するため記述順は効かない。 したがって glob 同士を重ねず、 モジュール 1 つにつき `<dir>/*` を 1 本だけ置く。 確認は `anatomia domains program --repo .` で unclassified 0 を保つこと。",
+
+  "layers": [
+    { "glob": "src/preload/*", "layer": "presentation" },
+    { "glob": "src/renderer/*", "layer": "presentation" },
+    { "glob": "src/renderer/AddressBar/*", "layer": "presentation" },
+    { "glob": "src/renderer/Comparatio/*", "layer": "presentation" },
+    { "glob": "src/renderer/GestureOverlay/*", "layer": "presentation" },
+    { "glob": "src/renderer/GraphPane/*", "layer": "presentation" },
+    { "glob": "src/renderer/HabitusSwitcher/*", "layer": "presentation" },
+    { "glob": "src/renderer/Indagatio/*", "layer": "presentation" },
+    { "glob": "src/renderer/Rota/*", "layer": "presentation" },
+    { "glob": "src/renderer/Settings/*", "layer": "presentation" },
+    { "glob": "src/renderer/shader/*", "layer": "presentation" },
+    { "glob": "src/renderer/Start/*", "layer": "presentation" },
+    { "glob": "src/renderer/WindowControls/*", "layer": "presentation" },
+
+    { "glob": "scripts/*", "layer": "application" },
+    { "glob": "src/main/*", "layer": "application" },
+    { "glob": "src/main/actions/*", "layer": "application" },
+    { "glob": "src/main/ipc/*", "layer": "application" },
+    { "glob": "src/main/ipc/handlers/*", "layer": "application" },
+
+    { "glob": "src/main/anulus/*", "layer": "domain-logic" },
+    { "glob": "src/main/clavis/*", "layer": "domain-logic" },
+    { "glob": "src/main/comparatio/*", "layer": "domain-logic" },
+    { "glob": "src/main/cura/*", "layer": "domain-logic" },
+    { "glob": "src/main/fenestra/*", "layer": "domain-logic" },
+    { "glob": "src/main/forma/*", "layer": "domain-logic" },
+    { "glob": "src/main/forma/sites/amazon/*", "layer": "domain-logic" },
+    { "glob": "src/main/forma/sites/google/*", "layer": "domain-logic" },
+    { "glob": "src/main/gestus/*", "layer": "domain-logic" },
+    { "glob": "src/main/habitus/*", "layer": "domain-logic" },
+    { "glob": "src/main/habitus/presets/*", "layer": "domain-logic" },
+    { "glob": "src/main/indagatio/*", "layer": "domain-logic" },
+    { "glob": "src/main/migratio/*", "layer": "domain-logic" },
+    { "glob": "src/main/nexus/*", "layer": "domain-logic" },
+    { "glob": "src/main/radix/*", "layer": "domain-logic" },
+    { "glob": "src/main/rota/*", "layer": "domain-logic" },
+    { "glob": "src/main/sigillum/*", "layer": "domain-logic" },
+    { "glob": "src/main/speculum/*", "layer": "domain-logic" },
+    { "glob": "src/main/umbra/*", "layer": "domain-logic" },
+    { "glob": "src/main/vitrum/*", "layer": "domain-logic" },
+    { "glob": "src/main/vitrum/presets/*", "layer": "domain-logic" },
+
+    { "glob": "src/main/tabularium/*", "layer": "infrastructure" },
+    { "glob": "src/main/tabularium/migrations/*", "layer": "infrastructure" },
+    { "glob": "src/main/tabularium/repositories/*", "layer": "infrastructure" },
+    { "glob": "src/main/vinculum/*", "layer": "infrastructure" },
+    { "glob": "src/main/vinculum/tools/*", "layer": "infrastructure" },
+
+    { "glob": "src/shared/*", "layer": "shared" },
+    { "glob": "test/*", "layer": "shared" }
+  ],
+
+  "mergeCouplingThreshold": 1
+}

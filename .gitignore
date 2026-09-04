@@ -5,3 +5,10 @@ coverage/
 .env
 .env.*
 *.log
+
+# Anatomia のローカル状態 (解析キャッシュ / link-stability)。
+# layers.json だけはリポジトリが持つ層 (プログラムドメイン) の宣言なので追跡する。
+# `.anatomia/` とディレクトリごと除外する形にはしないこと — git は除外ディレクトリ内の
+# ファイルを `!` で再包含できず、 layers.json をコミットできなくなる。
+.anatomia/*
+!.anatomia/layers.json
