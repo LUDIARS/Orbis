@@ -1,5 +1,19 @@
 # Excubitor catalog fragment -- Orbis owns this desktop application definition.
 services:
+  - code: orbis-native
+    name: Orbis Tela CEF native host
+    tier: local-app
+    project_code: Ob
+    runtime: app
+    repo: LUDIARS/Orbis
+    cwd: ${ARS_ROOT}/Orbis
+    exec: ${ARS_ROOT}/Orbis/build-native/Release/orbis_native.exe
+    exec_args:
+      - '--font=${ARS_ROOT}/Orbis/build-native/assets/default.ttf'
+      - '--profile=${ARS_ROOT}/Orbis/build-native/profile'
+      - '--url=https://example.com'
+    autostart: false
+    restart_policy: 'no'
   - code: orbis
     name: Orbis (interest graph browser)
     tier: local-app

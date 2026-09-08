@@ -1,1 +1,17 @@
-{"name":"fenestra","description":"Cura ウインドウの状態遷移と操作。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/fenestra/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)test/fenestra-state-machine\\.test\\.ts$"}]}
+{
+  "name": "fenestra",
+  "description": "Cura ウインドウの状態遷移と操作。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)src/main/fenestra/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)test/fenestra-state-machine\\.test\\.ts$"
+    },
+    {
+      "pathPattern": "(^|/)native/fenestra/(?:.*/)?[^/]+$"
+    }
+  ]
+}

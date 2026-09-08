@@ -2,6 +2,8 @@ node_modules/
 dist/
 out/
 coverage/
+build-native/
+build-deps/
 .env
 .env.*
 *.log

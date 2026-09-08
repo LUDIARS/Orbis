@@ -1,1 +1,26 @@
-{"name":"radix","description":"Electron の起動、単一インスタンス、ライフサイクル、版追従。","presetRules":[],"templateRules":[],"membership":[{"pathPattern":"(^|/)src/main/radix/(?:.*/)?[^/]+$"},{"pathPattern":"(^|/)src/main/index\\.ts$"},{"pathPattern":"(^|/)scripts/check-electron-eol\\.mjs$"},{"pathPattern":"(^|/)\\.github/workflows/(?:ci|electron-watch)\\.yml$"}]}
+{
+  "name": "radix",
+  "description": "ブラウザ基盤の起動、ライフサイクル、版追従。新実装は CEF、移行比較用の既存実装は Electron。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)src/main/radix/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)src/main/index\\.ts$"
+    },
+    {
+      "pathPattern": "(^|/)scripts/check-electron-eol\\.mjs$"
+    },
+    {
+      "pathPattern": "(^|/)\\.github/workflows/(?:ci|electron-watch)\\.yml$"
+    },
+    {
+      "pathPattern": "(^|/)native/radix/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)scripts/build-native\\.mjs$"
+    }
+  ]
+}

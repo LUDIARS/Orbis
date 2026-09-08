@@ -38,6 +38,10 @@
 
 ## 2. 基盤方針 (R1/R2) — Chromium をフォークしない
 
+> 2026-09-08 neco 決定: 新実装は Electron から Tela/Pictor + CEF へ移行する。
+> 現行移行契約は [Tela UI と CEF WebView](../feature/tela-cef-browser.md)。
+> 以下の Electron 採用記述は既存実装の履歴であり、新基盤の採用根拠ではない。
+
 ### 判断
 **Electron を採用し、Chromium 本体へのパッチをゼロにする (zero-patch policy)。**
 全機能をシェル層 (main process + preload + renderer UI) で実装し、Chromium 更新は `electron` の依存版更新 1 コミットで済む状態を保つ。
