@@ -1,0 +1,1 @@
+{"service":"orbis","include":["src/main/vinculum/*.ts"],"rules":{"contract-wrap":true}}

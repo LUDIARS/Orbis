@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "contractsDir": "contracts",
+  "runtimeFile": "contracts/contract-runtime.ts",
+  "importFrom": "../../../contracts/contract-runtime.ts",
+  "contracts": [
+    {"id":"C-1","criterion":"C-1 readToken(env): 正しい形式の環境トークンだけを返し、不備は値を含まないエラーにする","symbol":"readToken","file":"src/main/vinculum/auth.ts","module":"contracts/token.contract.ts","mode":"observe","sample":1},
+    {"id":"C-2","criterion":"C-2 vinculumPort(env): 1..65535 の整数ポートだけを返す","symbol":"vinculumPort","file":"src/main/vinculum/port.ts","module":"contracts/port.contract.ts","mode":"observe","sample":1},
+    {"id":"C-3","criterion":"C-3 verificationEnabled(db,env): env または DB の on で照合を有効にする","symbol":"verificationEnabled","file":"src/main/vinculum/peer-verification.ts","module":"contracts/peer.contract.ts","mode":"observe","sample":1},
+    {"id":"C-4","criterion":"C-4 performAct(webContents,action): 操作結果に入力内容を含めず、秘密情報欄への入力を拒否する","symbol":"performAct","file":"src/main/vinculum/cdp.ts","module":"contracts/input.contract.ts","mode":"observe","sample":1}
+  ]
+}

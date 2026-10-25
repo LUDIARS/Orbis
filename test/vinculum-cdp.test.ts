@@ -1,4 +1,5 @@
 import type { WebContents } from 'electron'
+import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import { captureScreenshotPng, performAct, readAccessibilityTree } from '../src/main/vinculum/cdp.js'
 
@@ -22,6 +23,55 @@ function fakeWebContents(respond: (call: Call) => Promise<unknown>): { webConten
 }
 
 describe('vinculum cdp', () => {
+  const element = (tagName: string, type: string, autocomplete: string) => ({
+    tagName, value: 'unchanged', shadowRoot: null,
+    getAttribute: (name: string) => name === 'type' ? type : name === 'autocomplete' ? autocomplete : null,
+    dispatchEvent: () => true
+  })
+  const sensitive = [
+    ['INPUT', 'password', ''], ['INPUT', 'PASSWORD', ''],
+    ...['current-password', 'new-password', 'one-time-code', 'cc-number', 'cc-csc', 'section-checkout billing CC-EXP'].map(value => ['INPUT', 'text', value]),
+    ['SELECT', '', 'cc-exp-month']
+  ]
+
+  it.each(sensitive)('blocks type and select for sensitive element %#', async (tag, type, autocomplete) => {
+    const el = element(tag, type, autocomplete)
+    const fake = fakeWebContents(async call => ({ result: { value: runInNewContext(String(call.params?.expression), {
+      document: { activeElement: el, querySelector: () => el }, Event: class {}
+    }) } }))
+    for (const action of [{ type: 'type', text: 'private-dummy' }, { type: 'select', selector: '#field', value: 'private-dummy' }]) {
+      await expect(performAct(fake.webContents, action)).rejects.toThrow('Input is unavailable or sensitive.')
+    }
+    expect(fake.calls.some(call => call.method === 'Input.insertText')).toBe(false)
+    expect(el.value).toBe('unchanged')
+    expect(fake.detached()).toBe(true)
+  })
+
+  it('allows ordinary typing and selection with bounded summaries', async () => {
+    const el = element('INPUT', 'text', 'username')
+    const fake = fakeWebContents(async call => call.method === 'Runtime.evaluate' ? { result: { value: runInNewContext(String(call.params?.expression), {
+      document: { activeElement: el, querySelector: () => el }, Event: class {}
+    }) } } : {})
+    expect(await performAct(fake.webContents, { type: 'type', text: 'hello' })).toEqual({ performed: 'type(5 chars)' })
+    expect(fake.calls.at(-1)).toEqual({ method: 'Input.insertText', params: { text: 'hello' } })
+    expect(await performAct(fake.webContents, { type: 'select', selector: '#field', value: 'choice' })).toEqual({ performed: 'select' })
+    expect(el.value).toBe('choice')
+  })
+
+  it('checks focused shadow and frame descendants and rejects inaccessible frames', async () => {
+    const password = element('INPUT', 'password', '')
+    for (const activeElement of [
+      { ...element('DIV', '', ''), shadowRoot: { activeElement: password } },
+      { ...element('IFRAME', '', ''), contentDocument: { activeElement: password } },
+      { ...element('IFRAME', '', ''), contentDocument: null }
+    ]) {
+      const fake = fakeWebContents(async call => ({ result: { value: runInNewContext(String(call.params?.expression), {
+        document: { activeElement }
+      }) } }))
+      await expect(performAct(fake.webContents, { type: 'type', text: 'dummy' })).rejects.toThrow()
+      expect(fake.calls.some(call => call.method === 'Input.insertText')).toBe(false)
+    }
+  })
   it('scrolls with scrollBy instead of a wheel event that may never be acknowledged', async () => {
     const fake = fakeWebContents(() => Promise.resolve({ result: { value: undefined } }))
     expect(await performAct(fake.webContents, { type: 'scroll', deltaY: 240 })).toEqual({ performed: 'scroll(240)' })

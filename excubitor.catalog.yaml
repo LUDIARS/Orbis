@@ -47,6 +47,10 @@ services:
     app_kind: electron
     cwd: ${ARS_ROOT}/Orbis
     command: npm run dev
+    port: 17391
+    env:
+      ORBIS_VINCULUM_PORT: "17391"
+      ORBIS_VINCULUM_PEER_VERIFICATION: "on"
     allow_hot_reload: true
     autostart: false
     restart_policy: "no"

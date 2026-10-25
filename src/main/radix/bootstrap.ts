@@ -36,7 +36,7 @@ import { registerRotaHandler } from '../ipc/handlers/register-rota-handler.js'
 import { RotaOverlayWindow } from '../rota/overlay-window.js'
 import { SigillumService } from '../sigillum/service.js'
 import { AuditLog } from '../vinculum/audit.js'
-import { createOrLoadToken } from '../vinculum/auth.js'
+import { readToken } from '../vinculum/auth.js'
 import { VinculumAccessLog } from '../vinculum/access-log.js'
 import { verificationEnabled } from '../vinculum/peer-verification.js'
 import { OrbisVinculumOperations } from '../vinculum/orbis-operations.js'
@@ -247,8 +247,9 @@ export async function bootstrap(): Promise<void> {
     anulus.destroy()
     speculum.destroy()
   })
+  let vinculum: VinculumServer | undefined
   app.once('will-quit', () => {
-    void vinculum.stop().catch(() => undefined)
+    void vinculum?.stop().catch(() => undefined) // Best-effort shutdown while Electron is quitting.
     unregisterGlobalShortcuts()
     for (const dispose of disposeIpc) dispose()
     ipcMain.removeListener(channels.anulusOpen, openFromAnulus)
@@ -270,20 +271,19 @@ export async function bootstrap(): Promise<void> {
   if (restored.length === 0) createCura()
   publishAnulus()
 
-  /** @implements SPEC-ORBIS-P5-VINCULUM Cc 専用の loopback MCP ブリッジ。ポートは OS 採番し vinculum.json に書く。 */
-  const vinculum = new VinculumServer(
-    createOrLoadToken(db),
-    sigillumService,
-    auditLog,
-    new OrbisVinculumOperations(sigillumService, factory, pageRepository),
-    new VinculumAccessLog(db),
-    // Excubitor 照合は既定 OFF。 Cc が instance_id を名乗るようになってから
-    // vinculum_config の excubitor_verification を 'on' にする (§7.3 R12)。
-    () => verificationEnabled(db)
-  )
-  void vinculum.start(app.getPath('userData'))
-    .then((port) => console.log(`Vinculum is listening on 127.0.0.1:${port}`))
-    .catch((error: unknown) => console.error('Unable to start Vinculum.', error))
+  /** @implements SPEC-ORBIS-VINCULUM-VAULT Only Vinculum is disabled when its environment is invalid. */
+  void (async () => {
+    vinculum = new VinculumServer(
+      readToken(),
+      sigillumService,
+      auditLog,
+      new OrbisVinculumOperations(sigillumService, factory, pageRepository),
+      new VinculumAccessLog(db),
+      // The catalog enables verification; the DB setting remains supported.
+      () => verificationEnabled(db)
+    )
+    await vinculum.start(app.getPath('userData'))
+  })().catch((error: unknown) => console.error('Unable to start Vinculum.', error instanceof Error ? error.message : 'Startup failed.'))
 
   app.on('activate', () => {
     anulus.open()

@@ -7,6 +7,7 @@ build-deps/
 .env
 .env.*
 *.log
+logs/
 
 # Anatomia のローカル状態 (解析キャッシュ / link-stability)。
 # layers.json だけはリポジトリが持つ層 (プログラムドメイン) の宣言なので追跡する。

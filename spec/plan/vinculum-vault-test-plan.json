@@ -1,0 +1,297 @@
+{
+  "summary": "Lead with \"Input validation at the trust boundary\" (critical), then define and enforce the contract first. 3 test suggestions, 2 fix steps.",
+  "testPlan": {
+    "suggestions": [
+      {
+        "id": "test-001",
+        "title": "Input validation at the trust boundary",
+        "kind": "security",
+        "priority": "critical",
+        "confidence": 0.75,
+        "targetFiles": [
+          ".gitignore",
+          "excubitor.catalog.yaml",
+          "src/main/radix/bootstrap.ts",
+          "src/main/vinculum/auth.ts",
+          "src/main/vinculum/cdp.ts",
+          "src/main/vinculum/input-policy.ts",
+          "src/main/vinculum/peer-verification.ts",
+          "src/main/vinculum/port.ts",
+          "src/main/vinculum/server.ts"
+        ],
+        "rationale": "Every externally reachable input needs validation tests: type, range, size, and encoding.",
+        "draft": {
+          "framework": "vitest",
+          "description": "Given malformed, oversized, and hostile inputs at the boundary, when they are submitted, then each is rejected with a safe error and no side effects."
+        },
+        "evidenceIds": [
+          "ev-001",
+          "ev-003",
+          "ev-004",
+          "ev-005",
+          "ev-006",
+          "ev-007",
+          "ev-008",
+          "ev-009",
+          "ev-010",
+          "ev-011",
+          "ev-012",
+          "ev-013",
+          "ev-014",
+          "ev-015",
+          "ev-016",
+          "ev-017",
+          "ev-018",
+          "ev-019",
+          "ev-020"
+        ]
+      },
+      {
+        "id": "test-002",
+        "title": "Authorization checks for the affected operations",
+        "kind": "security",
+        "priority": "critical",
+        "confidence": 0.65,
+        "rationale": "Authentication is not authorization; each operation must verify the caller may perform it on that resource.",
+        "draft": {
+          "framework": "vitest",
+          "description": "Given a caller without permission for the target resource, when the operation is attempted, then it is denied and audited."
+        },
+        "evidenceIds": [
+          "ev-001",
+          "ev-003",
+          "ev-004",
+          "ev-005",
+          "ev-006",
+          "ev-007",
+          "ev-008",
+          "ev-009",
+          "ev-010",
+          "ev-011",
+          "ev-012",
+          "ev-013",
+          "ev-014",
+          "ev-015",
+          "ev-016",
+          "ev-017",
+          "ev-018",
+          "ev-019",
+          "ev-020"
+        ]
+      },
+      {
+        "id": "test-003",
+        "title": "Abuse-case scenarios",
+        "kind": "security",
+        "priority": "high",
+        "confidence": 0.55,
+        "rationale": "Beyond single requests: replay, enumeration, and rate abuse are how the surface actually gets attacked.",
+        "draft": {
+          "framework": "vitest",
+          "description": "Given scripted abuse patterns (replay, enumeration, burst rates), when they run against the surface, then limits and protections engage as documented."
+        },
+        "evidenceIds": [
+          "ev-001",
+          "ev-003",
+          "ev-004",
+          "ev-005",
+          "ev-006",
+          "ev-007",
+          "ev-008",
+          "ev-009",
+          "ev-010",
+          "ev-011",
+          "ev-012",
+          "ev-013",
+          "ev-014",
+          "ev-015",
+          "ev-016",
+          "ev-017",
+          "ev-018",
+          "ev-019",
+          "ev-020"
+        ]
+      }
+    ]
+  },
+  "fixPolicy": {
+    "strategy": "contract_first",
+    "steps": [
+      {
+        "id": "fix-001",
+        "title": "Define the validation and authorization contract",
+        "description": "Write down what is accepted, who may do what, and what every rejection looks like — before code.",
+        "evidenceIds": [
+          "ev-001"
+        ]
+      },
+      {
+        "id": "fix-002",
+        "title": "Enforce the contract at the boundary",
+        "description": "Implement validation and authorization exactly where untrusted data enters, with tests per contract clause.",
+        "targetFiles": [
+          ".gitignore",
+          "excubitor.catalog.yaml",
+          "src/main/radix/bootstrap.ts",
+          "src/main/vinculum/auth.ts",
+          "src/main/vinculum/cdp.ts",
+          "src/main/vinculum/input-policy.ts",
+          "src/main/vinculum/peer-verification.ts",
+          "src/main/vinculum/port.ts",
+          "src/main/vinculum/server.ts"
+        ],
+        "dependsOn": [
+          "fix-001"
+        ],
+        "evidenceIds": [
+          "ev-001",
+          "ev-003",
+          "ev-004",
+          "ev-005",
+          "ev-006",
+          "ev-007",
+          "ev-008",
+          "ev-009",
+          "ev-010",
+          "ev-011",
+          "ev-012",
+          "ev-013",
+          "ev-014",
+          "ev-015",
+          "ev-016",
+          "ev-017",
+          "ev-018",
+          "ev-019",
+          "ev-020"
+        ]
+      }
+    ],
+    "risks": [
+      {
+        "id": "risk-001",
+        "severity": "high",
+        "description": "Tightening validation can break existing legitimate callers; stage the rollout and monitor rejections."
+      }
+    ],
+    "rollback": "Relax to log-only enforcement if legitimate traffic is rejected, then re-tighten with corrected rules."
+  },
+  "evidence": [
+    {
+      "id": "ev-001",
+      "type": "objective",
+      "detail": "Caller requested security: Preserve AI-only credentials and dynamic ports while reapplying human Vinculum Vault authentication, fixed loopback port and sensitive-input policy"
+    },
+    {
+      "id": "ev-002",
+      "type": "project_metadata",
+      "detail": "Project context: test runners vitest."
+    },
+    {
+      "id": "ev-003",
+      "type": "diff",
+      "detail": "A code diff was supplied with the request."
+    },
+    {
+      "id": "ev-004",
+      "type": "changed_file",
+      "file": ".gitignore",
+      "detail": "Changed file: .gitignore"
+    },
+    {
+      "id": "ev-005",
+      "type": "changed_file",
+      "file": "excubitor.catalog.yaml",
+      "detail": "Changed file: excubitor.catalog.yaml"
+    },
+    {
+      "id": "ev-006",
+      "type": "changed_file",
+      "file": "spec/domains/vinculum.domain.json",
+      "detail": "Changed file: spec/domains/vinculum.domain.json"
+    },
+    {
+      "id": "ev-007",
+      "type": "changed_file",
+      "file": "spec/feature/vinculum-vault.md",
+      "detail": "Changed file: spec/feature/vinculum-vault.md"
+    },
+    {
+      "id": "ev-008",
+      "type": "changed_file",
+      "file": "spec/plan/2026-08-24-orbis-browser-design.md",
+      "detail": "Changed file: spec/plan/2026-08-24-orbis-browser-design.md"
+    },
+    {
+      "id": "ev-009",
+      "type": "changed_file",
+      "file": "spec/plan/vinculum-vault-test-plan.json",
+      "detail": "Changed file: spec/plan/vinculum-vault-test-plan.json"
+    },
+    {
+      "id": "ev-010",
+      "type": "changed_file",
+      "file": "src/main/radix/bootstrap.ts",
+      "detail": "Changed file: src/main/radix/bootstrap.ts"
+    },
+    {
+      "id": "ev-011",
+      "type": "changed_file",
+      "file": "src/main/vinculum/auth.ts",
+      "detail": "Changed file: src/main/vinculum/auth.ts"
+    },
+    {
+      "id": "ev-012",
+      "type": "changed_file",
+      "file": "src/main/vinculum/cdp.ts",
+      "detail": "Changed file: src/main/vinculum/cdp.ts"
+    },
+    {
+      "id": "ev-013",
+      "type": "changed_file",
+      "file": "src/main/vinculum/input-policy.ts",
+      "detail": "Changed file: src/main/vinculum/input-policy.ts"
+    },
+    {
+      "id": "ev-014",
+      "type": "changed_file",
+      "file": "src/main/vinculum/peer-verification.ts",
+      "detail": "Changed file: src/main/vinculum/peer-verification.ts"
+    },
+    {
+      "id": "ev-015",
+      "type": "changed_file",
+      "file": "src/main/vinculum/port.ts",
+      "detail": "Changed file: src/main/vinculum/port.ts"
+    },
+    {
+      "id": "ev-016",
+      "type": "changed_file",
+      "file": "src/main/vinculum/server.ts",
+      "detail": "Changed file: src/main/vinculum/server.ts"
+    },
+    {
+      "id": "ev-017",
+      "type": "changed_file",
+      "file": "test/vinculum-auth.test.ts",
+      "detail": "Changed file: test/vinculum-auth.test.ts"
+    },
+    {
+      "id": "ev-018",
+      "type": "changed_file",
+      "file": "test/vinculum-cdp.test.ts",
+      "detail": "Changed file: test/vinculum-cdp.test.ts"
+    },
+    {
+      "id": "ev-019",
+      "type": "changed_file",
+      "file": "test/vinculum-peer-verification.test.ts",
+      "detail": "Changed file: test/vinculum-peer-verification.test.ts"
+    },
+    {
+      "id": "ev-020",
+      "type": "changed_file",
+      "file": "test/vinculum-server-start.test.ts",
+      "detail": "Changed file: test/vinculum-server-start.test.ts"
+    }
+  ]
+}

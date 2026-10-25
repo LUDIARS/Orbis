@@ -237,22 +237,38 @@ Orbis/
 - Tabularium に `sigillum` テーブル (id, kind, curaId, pageId, issuedAt, attachedTo: ccSessionId?) を持ち、ログ (§7.5) の主キーにする。
 
 ### 7.3 Vinculum (Cc 専用ブリッジ)
-- 実体: Orbis main process 内の **MCP サーバ (stdio/loopback)** + 補助 HTTP (loopback のみ)。ポートは Excubitor catalog に登録し固定しない (port-source-rule)。
+- 実体: Electron 版 Orbis main process 内の **MCP Streamable HTTP サーバ**。`127.0.0.1` にのみ bind する。ポートの正本はサービス所有 `excubitor.catalog.yaml` の `orbis.port: 17391` と `ORBIS_VINCULUM_PORT: "17391"`。Cc は catalog 経由で解決し、番号をコードへ複製しない。
 - 接続制限 (R12):
   - loopback 以外は bind しない
-  - Cc がヘルスチェック時に提示する共有トークン (Cc の設定 UI/DB 1 系統から発行、env には置かない) を必須
+  - 共有トークンは Excubitor Vault を正本とし、binding で `orbis` と `concordia` へ `ORBIS_VINCULUM_TOKEN` (base64url 43 文字) を env 注入する。旧 DB トークン行は読まず、削除しない
   - 接続元プロセスが Excubitor 管理下の Concordia であることを Excubitor `service_detail` で照合 (照合不能なら拒否)
 
-#### SPEC-ORBIS-P6-VINCULUM-PEER: 接続元照合の段取り (既定 OFF)
+#### SPEC-ORBIS-VINCULUM-VAULT: Vault 認証と固定ポート
+
+関連タスク: `actio:feebc803-7874-4026-9a9f-1278b05e876a`。
+トークン未設定・不正、ポート未設定・不正 (1..65535 の整数以外) なら Vinculum だけを起動しない。
+エラーにトークン値を含めず、DB 生成や OS 採番へ戻さない。`vinculum.json` は互換用の port 情報に限る。
+トークン登録は人間が Excubitor「環境変数」タブから行い、両サービスへ binding する。
+本節の固定ポート・トークンは人用モード専用。AI 専用モード (`SPEC-ORBIS-AI-ONLY`) は
+`ORBIS_AI_CC_TOKEN`、OS 採番ポート、独立した `orbis-ai-only` プロファイルと discovery を使う。
+互いのトークンを代用せず、AI 側の必須照合・Origin 制限は人用設定に依存しない。
+
+#### SPEC-ORBIS-VINCULUM-INPUT: 秘密情報欄への入力拒否
+
+`type` のフォーカス先と `select` の対象について、`input[type=password]`、autocomplete の
+`current-password` / `new-password` / `one-time-code` / `cc-*` を拒否する。
+autocomplete は空白区切りのトークンと大文字小文字を正規化して検査する。
+フォーカスは open shadow root と同一 origin iframe をたどり、照合できない frame は拒否する。
+拒否エラーに入力値を含めない。成功時も入力は文字数、選択は操作名のみを返す。
+
+#### SPEC-ORBIS-P6-VINCULUM-PEER: 接続元照合の段取り (catalog で ON)
 
 照合は Cc が自分の Excubitor `instance_id` を `x-orbis-instance-id` で名乗り、
 Orbis が Excubitor `GET /api/v1/services/concordia` の `instance_id` と突き合わせる形で行う。
 
-**既定は OFF** (neco 判断 2026-09-04)。 名乗る側は Cc の変更で入るため、
-先に fail-closed を既定にすると、まだ名乗っていない Cc からの接続が全部 401 になり
-Cc ↔ Orbis のリンクが切れる。 Cc 側が入ってから `vinculum_config` の
-`excubitor_verification` を `'on'` にする。 `'on'` 以外の値と未設定は OFF —
-設定ミスで黙って fail-closed に倒れると、原因が 401 だけから読み取れない。
+`ORBIS_VINCULUM_PEER_VERIFICATION === 'on'` または `vinculum_config.excubitor_verification === 'on'`
+で有効になる。catalog は env を `on` にする。既存 DB の設定も引き続き使え、env の off で DB の on は打ち消さない。
+両方未設定なら無効だが、管理サービス起動では catalog の ON が適用される。
 
 ON のときは **照合不能も拒否**する。 Excubitor に届かない・Concordia が
 `running` でない・`instance_id` を持たない・値が食い違う、のいずれも
@@ -269,6 +285,8 @@ sigillum への外部キーを持つので、まだ sigillum を持たない「�
 接続先 origin は Excubitor / ProcessMap 側が env (`ORBIS_EXCUBITOR_URL` / `EXCUBITOR_URL`)
 で渡し、Orbis 側にはポートを複製しない。path/query/credential を含む値と未設定は
 照合不能として拒否する。
+Excubitor の所有 catalog の `excubitor` エントリから topology が `EXCUBITOR_URL` を生成し、
+`resolveInjectEnv` が子サービスへ渡す。Orbis catalog への origin の重複定義は不要。
 prefix は `/api/v1/` — `/v1/` と `/api/` は 404 (2026-09-04 実測)。
   - OpenAPI/MCP manifest を外部に出さない。Corpus/Hub には登録しない
 - ツール群 (MCP tool、全て `sigillum` 引数必須):

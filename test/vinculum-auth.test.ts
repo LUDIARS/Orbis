@@ -1,34 +1,21 @@
 import { DatabaseSync } from 'node:sqlite'
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { bearerToken, clientIdHeader, createOrLoadToken, hasValidToken, instanceIdHeader, isLoopback } from '../src/main/vinculum/auth.js'
+import { bearerToken, clientIdHeader, readToken, hasValidToken, instanceIdHeader, isLoopback } from '../src/main/vinculum/auth.js'
 
 describe('vinculum auth', () => {
-  it('creates the token once and reloads the same value', () => {
+  it('reads only the environment token and leaves legacy DB rows untouched', () => {
     const db = new DatabaseSync(':memory:')
     try {
-      db.exec(readFileSync('src/main/tabularium/migrations/0001_init.sql', 'utf8'))
-      db.exec(readFileSync('src/main/tabularium/migrations/0002_product_facts.sql', 'utf8'))
-      db.exec(readFileSync('src/main/tabularium/migrations/0003_sigillum.sql', 'utf8'))
-      db.exec(readFileSync('src/main/tabularium/migrations/0004_sigillum_active.sql', 'utf8'))
-      const token = createOrLoadToken(db)
-      expect(token.length).toBeGreaterThanOrEqual(32)
-      expect(createOrLoadToken(db)).toBe(token)
+      db.exec("CREATE TABLE vinculum_config (key TEXT PRIMARY KEY, value TEXT)")
+      db.exec("INSERT INTO vinculum_config VALUES ('token', 'legacy')")
+      expect(readToken({ ORBIS_VINCULUM_TOKEN: 'a'.repeat(43) })).toBe('a'.repeat(43))
+      expect(() => readToken({})).toThrow('ORBIS_VINCULUM_TOKEN is required.')
+      expect(db.prepare("SELECT value FROM vinculum_config WHERE key = 'token'").get()).toEqual({ value: 'legacy' })
     } finally { db.close() }
   })
 
-  it('rotates a malformed stored token instead of accepting weak authentication', () => {
-    const db = new DatabaseSync(':memory:')
-    try {
-      db.exec(readFileSync('src/main/tabularium/migrations/0001_init.sql', 'utf8'))
-      db.exec(readFileSync('src/main/tabularium/migrations/0002_product_facts.sql', 'utf8'))
-      db.exec(readFileSync('src/main/tabularium/migrations/0003_sigillum.sql', 'utf8'))
-      db.exec(readFileSync('src/main/tabularium/migrations/0004_sigillum_active.sql', 'utf8'))
-      db.prepare("INSERT INTO vinculum_config (key, value) VALUES ('token', 'weak')").run()
-      const token = createOrLoadToken(db)
-      expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/)
-      expect(token).not.toBe('weak')
-    } finally { db.close() }
+  it.each(['', 'weak', 'a'.repeat(42), 'a'.repeat(44), 'a'.repeat(43) + '\n', '+'.repeat(43), ' '.repeat(43)])('rejects malformed tokens without exposing values %#', (token) => {
+    expect(() => readToken({ ORBIS_VINCULUM_TOKEN: token })).toThrow(/^ORBIS_VINCULUM_TOKEN (is required|must be 43 base64url characters)\.$/)
   })
 
   it('rejects missing, wrong, and different-length tokens', () => {
@@ -36,6 +23,11 @@ describe('vinculum auth', () => {
     expect(hasValidToken('secret', 'secret')).toBe(true)
     expect(hasValidToken('Secret', 'secret')).toBe(false)
     expect(hasValidToken('secret-longer', 'secret')).toBe(false)
+  })
+
+  it('never falls back to the AI-only token', () => {
+    expect(() => readToken({ ORBIS_AI_CC_TOKEN: 'b'.repeat(43) })).toThrow('ORBIS_VINCULUM_TOKEN is required.')
+    expect(readToken({ ORBIS_VINCULUM_TOKEN: 'a'.repeat(43), ORBIS_AI_CC_TOKEN: 'b'.repeat(43) })).toBe('a'.repeat(43))
   })
 
   it('accepts only the exact Bearer authorization scheme', () => {

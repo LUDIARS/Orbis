@@ -1,19 +1,20 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto'
-import type { DatabaseSync } from 'node:sqlite'
+import { timingSafeEqual } from 'node:crypto'
+import { contract } from '../../../contracts/contract-runtime.ts'; /* augur-inject:import:968aaf0d */
+import augurContract_d537756c from '../../../contracts/token.contract.ts'; /* augur-inject:contract-predicate:4f201150 */
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/
 const CLIENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const INSTANCE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 
-export function createOrLoadToken(db: DatabaseSync): string {
-  const stored = db.prepare("SELECT value FROM vinculum_config WHERE key = 'token'").get() as { value?: string } | undefined
-  if (stored?.value && TOKEN_PATTERN.test(stored.value)) return stored.value
-  const token = randomBytes(32).toString('base64url')
-  db.prepare(
-    "INSERT INTO vinculum_config (key, value) VALUES ('token', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-  ).run(token)
+/** @implements SPEC-ORBIS-VINCULUM-VAULT Vault is the only token authority; legacy DB rows are untouched. */
+export function readToken(env: NodeJS.ProcessEnv = process.env): string {
+  const token = env.ORBIS_VINCULUM_TOKEN
+  if (!token) throw new Error('ORBIS_VINCULUM_TOKEN is required.')
+  if (token.length !== 43 || !TOKEN_PATTERN.test(token)) throw new Error('ORBIS_VINCULUM_TOKEN must be 43 base64url characters.')
   return token
 }
+// @ts-expect-error augur-inject
+readToken = contract(readToken, { ...augurContract_d537756c, contractId: 'C-1', mode: 'observe', sample: 1, where: 'src/main/vinculum/auth.ts:8', rule: 'contract-wrap', id: 'd537756c' }); /* augur-inject:contract-wrap:d537756c */
 
 export function isLoopback(address: string | undefined): boolean { return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1' }
 export function bearerToken(authorization: string | undefined): string | undefined {

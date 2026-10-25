@@ -6,6 +6,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod'
 import type { SigillumService } from '../sigillum/service.js'
 import { AuditLog } from './audit.js'
+import { vinculumPort } from './port.js'
 import { bearerToken, clientIdHeader, hasValidToken, instanceIdHeader, isLoopback } from './auth.js'
 import type { PeerVerdict } from './peer-verification.js'
 import { verifyConcordiaPeer, type VerifyPeerOptions } from './peer-verification.js'
@@ -46,7 +47,7 @@ function explorationSigilla(value: unknown): string[] {
 
 /**
  * @implements SPEC-ORBIS-P5-VINCULUM loopback + 共有トークン限定の MCP エンドポイント。
- * @implements SPEC-ORBIS-P6-VINCULUM-PEER Excubitor service_detail による接続元照合 (既定 OFF)。
+ * @implements SPEC-ORBIS-P6-VINCULUM-PEER Excubitor service_detail による接続元照合 (catalog で ON)。
  */
 export class VinculumServer {
   private server: Server | undefined
@@ -67,6 +68,8 @@ export class VinculumServer {
 
   async start(configDir: string): Promise<number> {
     if (this.server) throw new Error('Vinculum is already started.')
+    // Human Vinculum uses the catalog port; AI-only discovery retains its own OS-assigned port.
+    const port = this.aiMode ? 0 : vinculumPort()
     const server = createServer(async (request, response) => {
       const verdict = await this.authorize(request)
       if (!verdict.allowed) { response.writeHead(401).end(); return }
@@ -95,7 +98,7 @@ export class VinculumServer {
       await new Promise<void>((resolve, reject) => {
         const onError = (error: Error): void => reject(error)
         server.once('error', onError)
-        server.listen(0, '127.0.0.1', () => {
+        server.listen(port, '127.0.0.1', () => {
           server.removeListener('error', onError)
           resolve()
         })

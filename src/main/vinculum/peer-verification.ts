@@ -1,14 +1,14 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { fetchServiceDetail, type ServiceDetailOptions } from './excubitor.js'
+import { contract } from '../../../contracts/contract-runtime.ts'; /* augur-inject:import:5bebf6ed */
+import augurContract_b5b8c43b from '../../../contracts/peer.contract.js'; /* augur-inject:contract-predicate:c8c2dfbf */
 
 /**
  * 設計書 §7.3 R12 の 3 本目: 「接続元プロセスが Excubitor 管理下の Concordia
  * であることを Excubitor `service_detail` で照合 (照合不能なら拒否)」。
  *
- * **既定は OFF** (neco 判断 2026-09-04)。 照合には Cc が自分の Excubitor
- * instance_id を提示する必要があり、それは Cc 側の変更で入る。 先に fail-closed
- * を既定にすると、まだ名乗っていない Cc からの接続が全部 401 になって
- * Cc ↔ Orbis のリンクが切れる。 Cc 側が入ったら設定で ON にする。
+ * catalog の ORBIS_VINCULUM_PEER_VERIFICATION=on または既存 DB 設定で有効にする。
+ * Cc は x-orbis-instance-id で Excubitor の instance_id を提示する。
  *
  * ON のときは **照合不能も拒否**する。 Excubitor が落ちている・応答しない・
  * instance_id を持たない、のいずれも「Excubitor 管理下であることを確認できない」
@@ -42,12 +42,15 @@ export interface PeerVerdict {
 
 /**
  * @implements SPEC-ORBIS-P6-VINCULUM-PEER
- * 値が無い / 'on' 以外は無効。 未設定のインストールが黙って fail-closed にならないようにする。
+ * env または DB の on で有効。env による有効化は DB の可用性に依存させない。
  */
-export function verificationEnabled(db: DatabaseSync): boolean {
+export function verificationEnabled(db: DatabaseSync, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.ORBIS_VINCULUM_PEER_VERIFICATION === 'on') return true
   const row = db.prepare('SELECT value FROM vinculum_config WHERE key = ?').get(CONFIG_KEY) as { value?: string } | undefined
   return row?.value === 'on'
 }
+// @ts-expect-error augur-inject
+verificationEnabled = contract(verificationEnabled, { ...augurContract_b5b8c43b, contractId: 'C-3', mode: 'observe', sample: 1, where: 'src/main/vinculum/peer-verification.ts:45', rule: 'contract-wrap', id: 'b5b8c43b' }); /* augur-inject:contract-wrap:b5b8c43b */
 
 export interface VerifyPeerOptions extends ServiceDetailOptions {
   serviceCode?: string

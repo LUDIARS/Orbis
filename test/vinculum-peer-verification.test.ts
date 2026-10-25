@@ -30,6 +30,16 @@ const running = (instanceId: string) =>
 const EXCUBITOR_BASE_URL = 'http://excubitor.test'
 
 describe('vinculum peer verification', () => {
+  it('enables verification from env even when the DB is off or unavailable', () => {
+    const db = openDb()
+    try {
+      expect(verificationEnabled(db, { ORBIS_VINCULUM_PEER_VERIFICATION: 'on' })).toBe(true)
+      expect(verificationEnabled(db, { ORBIS_VINCULUM_PEER_VERIFICATION: 'true' })).toBe(false)
+      db.prepare("INSERT INTO vinculum_config (key, value) VALUES ('excubitor_verification', 'on')").run()
+      expect(verificationEnabled(db, { ORBIS_VINCULUM_PEER_VERIFICATION: 'off' })).toBe(true)
+    } finally { db.close() }
+    expect(verificationEnabled(db, { ORBIS_VINCULUM_PEER_VERIFICATION: 'on' })).toBe(true)
+  })
   it('defaults to off so an installation without the Cc-side change keeps working', () => {
     const db = openDb()
     try {

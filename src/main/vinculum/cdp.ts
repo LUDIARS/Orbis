@@ -1,4 +1,7 @@
 import type { WebContents } from 'electron'
+import { focusedInput, isSensitiveInput } from './input-policy.js'
+import { contract } from '../../../contracts/contract-runtime.ts'; /* augur-inject:import:b2c2362a */
+import augurContract_826e055d from '../../../contracts/input.contract.js'; /* augur-inject:contract-predicate:0eaa19e5 */
 
 const debuggerQueues = new WeakMap<WebContents, Promise<void>>()
 
@@ -61,6 +64,7 @@ export async function captureScreenshotPng(webContents: WebContents, timeoutMs =
 
 export interface ActSummary { performed: string }
 
+/** @implements SPEC-ORBIS-VINCULUM-INPUT Reject sensitive inputs without returning their contents. */
 export async function performAct(webContents: WebContents, action: Record<string, unknown>): Promise<ActSummary> {
   const type = action.type
   if (type === 'click') {
@@ -78,6 +82,9 @@ export async function performAct(webContents: WebContents, action: Record<string
     const text = action.text
     if (typeof text !== 'string' || text.length === 0) throw new Error('type requires text.')
     return withDebugger(webContents, async (send) => {
+      const expression = `(() => { const el = (${focusedInput.toString()})(); return el && !(${isSensitiveInput.toString()})(el) ? 'allowed' : 'blocked' })()`
+      const check = await send('Runtime.evaluate', { expression, returnByValue: true }) as { result?: { value?: unknown } }
+      if (check.result?.value !== 'allowed') throw new Error('Input is unavailable or sensitive.')
       await send('Input.insertText', { text })
       return { performed: `type(${text.length} chars)` }
     })
@@ -96,11 +103,14 @@ export async function performAct(webContents: WebContents, action: Record<string
     const value = action.value
     if (typeof selector !== 'string' || typeof value !== 'string') throw new Error('select requires selector and value.')
     return withDebugger(webContents, async (send) => {
-      const expression = `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return 'not_found'; el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('change', { bubbles: true })); return 'ok' })()`
+      const expression = `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return 'not_found'; if ((${isSensitiveInput.toString()})(el)) return 'blocked'; el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('change', { bubbles: true })); return 'ok' })()`
       const result = await send('Runtime.evaluate', { expression, returnByValue: true }) as { result: { value?: unknown } }
-      if (result.result.value !== 'ok') throw new Error('The selector did not match an element.')
-      return { performed: `select(${selector})` }
+      if (result.result?.value === 'blocked') throw new Error('Input is unavailable or sensitive.')
+      if (result.result?.value !== 'ok') throw new Error('The selector did not match an element.')
+      return { performed: 'select' }
     })
   }
   throw new Error('Unsupported action type. Use click / type / scroll / select.')
 }
+// @ts-expect-error augur-inject
+performAct = contract(performAct, { ...augurContract_826e055d, contractId: 'C-4', mode: 'observe', sample: 1, where: 'src/main/vinculum/cdp.ts:66', rule: 'contract-wrap', id: '826e055d' }); /* augur-inject:contract-wrap:826e055d */
