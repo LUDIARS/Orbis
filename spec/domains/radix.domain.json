@@ -5,6 +5,14 @@
   "templateRules": [],
   "membership": [
     {
+      "pathPattern": "(^|/)electron\\.vite\\.config\\.ts$",
+      "specRefs": ["spec/feature/sandbox-preload-build.md"]
+    },
+    {
+      "pathPattern": "(^|/)(?:scripts/non-tty-build-output|test/non-tty-build-output\\.test)\\.ts$",
+      "specRefs": ["spec/feature/sandbox-preload-build.md"]
+    },
+    {
       "pathPattern": "(^|/)src/main/radix/(?:.*/)?[^/]+$"
     },
     {
