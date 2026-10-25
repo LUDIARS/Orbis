@@ -61,7 +61,8 @@ export class VinculumServer {
      * 再起動させると、Cc 側 PR を入れた直後の切り替えが確認しづらい。
      */
     private readonly verificationEnabled: () => boolean = () => false,
-    private readonly verifyOptions: VerifyPeerOptions = {}
+    private readonly verifyOptions: VerifyPeerOptions = {},
+    private readonly aiMode?: { browserSigillum: string }
   ) {}
 
   async start(configDir: string): Promise<number> {
@@ -102,7 +103,10 @@ export class VinculumServer {
       const address = server.address()
       if (!address || typeof address === 'string') throw new Error('Vinculum did not receive a TCP port.')
       await mkdir(configDir, { recursive: true })
-      await writeFile(join(configDir, 'vinculum.json'), JSON.stringify({ port: address.port }), 'utf8')
+      await writeFile(join(configDir, 'vinculum.json'), JSON.stringify({
+        port: address.port,
+        ...(this.aiMode ? { mode: 'ai-only', browserSigillum: this.aiMode.browserSigillum } : {})
+      }), 'utf8')
       return address.port
     } catch (error) {
       this.server = undefined
@@ -115,7 +119,10 @@ export class VinculumServer {
     const server = this.server
     this.server = undefined
     if (!server?.listening) return
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve())
+      server.closeAllConnections()
+    })
   }
 
   private registerTools(mcp: McpServer): void {
@@ -140,6 +147,11 @@ export class VinculumServer {
     const attached = (sigillum: string, clientId: string): void => { if (!this.seals.isAttached(sigillum, clientId)) throw new Error('Sigillum is not attached by this client.') }
     mcp.registerTool('orbis_attach', { inputSchema: sigillumField }, guarded('attach', ({ sigillum }, clientId) => attach(sigillum, clientId, this.seals)))
     mcp.registerTool('orbis_detach', { inputSchema: sigillumField }, guarded('detach', ({ sigillum }, clientId) => { attached(sigillum, clientId); return detach(sigillum, this.seals) }))
+    const closePage = this.operations.close?.bind(this.operations)
+    if (closePage) mcp.registerTool('orbis_close', { inputSchema: sigillumField }, guarded('close', ({ sigillum }, clientId) => {
+      attached(sigillum, clientId)
+      return closePage(sigillum)
+    }))
     mcp.registerTool('orbis_navigate', { inputSchema: { ...sigillumField, url: z.string().url() } }, guarded('navigate', ({ sigillum, url }, clientId) => { attached(sigillum, clientId); return navigate(sigillum, url, this.operations) }))
     mcp.registerTool('orbis_open', { inputSchema: { ...sigillumField, url: z.string().url(), visible: z.boolean().default(false) } }, guarded('navigate', async ({ sigillum, url, visible }, clientId) => {
       attached(sigillum, clientId)
@@ -186,13 +198,16 @@ export class VinculumServer {
    */
   private async authorize(request: IncomingMessage): Promise<PeerVerdict> {
     const clientId = clientIdHeader(request.headers[CLIENT_ID_HEADER])
+    if (this.aiMode && (request.headers.origin !== undefined || !clientId)) {
+      return this.recordAccess({ allowed: false, reason: 'invalid-ai-client', enforced: true }, clientId)
+    }
     if (!isLoopback(request.socket.remoteAddress)) return this.recordAccess({ allowed: false, reason: 'not-loopback', enforced: true }, clientId)
     if (!hasValidToken(bearerToken(request.headers.authorization), this.token)) {
       return this.recordAccess({ allowed: false, reason: 'invalid-token', enforced: true }, clientId)
     }
     let enabled: boolean
     try {
-      enabled = this.verificationEnabled()
+      enabled = this.aiMode ? true : this.verificationEnabled()
     } catch {
       // 設定を読めなければ照合を無効扱いにせず、認証済みリクエストも fail-closed にする。
       // DB 例外にはローカルパスが含まれ得るので、詳細は出さず判定理由を監査ログへ残す。

@@ -22,6 +22,7 @@ export type PeerVerificationReason =
   // 照合以前に落ちた分。 Excubitor 照合とは別の理由だが、
   // 「なぜ接続が通らなかったか」を 1 か所で読めないと運用で追えない。
   | 'not-loopback'
+  | 'invalid-ai-client'
   | 'invalid-token'
   | 'verification-config-unavailable'
   | 'disabled'

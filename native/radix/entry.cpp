@@ -5,6 +5,7 @@
 #include "include/cef_sandbox_win.h"
 #include <filesystem>
 #include <stdexcept>
+#include <string_view>
 
 // @implements SPEC-ORBIS-TELA-CEF
 // CEF's provided bootstrap owns sandbox initialization before this DLL is loaded.
@@ -15,6 +16,12 @@ extern "C" __declspec(dllexport) int RunWinMain(HINSTANCE instance,LPWSTR,int,
     if(subprocess>=0) return subprocess;
     bool initialized=false;
     try {
+        // @implements SPEC-ORBIS-AI-ONLY The native host has no Cc-only runtime yet.
+        // Reject instead of silently launching a human window with AI credentials.
+        wchar_t mode[32]{};
+        const auto mode_length=GetEnvironmentVariableW(L"ORBIS_MODE",mode,32);
+        if(mode_length && (mode_length>=32 || std::wstring_view(mode)!=L"human"))
+            throw std::runtime_error("Native Orbis does not support the requested ORBIS_MODE");
         if(!sandbox_info) throw std::runtime_error("CEF sandbox bootstrap is required");
         auto command=CefCommandLine::CreateCommandLine();
         command->InitFromString(GetCommandLineW());

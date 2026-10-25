@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "native": [
+    {
+      "file": "native/radix/entry.cpp",
+      "standard": "c++20",
+      "includes": ["native"],
+      "packages": ["orbis-cef-152", "orbis-tela"],
+      "defines": ["UNICODE", "_UNICODE", "NOMINMAX", "_WIN32_WINNT=0x0A00", "NTDDI_VERSION=0x0A00000A", "CEF_API_VERSION=CEF_API_VERSION_LAST", "CEF_USE_BOOTSTRAP"]
+    },
+    {
+      "file": "native/radix/browser_client.cpp",
+      "standard": "c++20",
+      "includes": ["native"],
+      "packages": ["orbis-cef-152"],
+      "defines": ["UNICODE", "_UNICODE", "NOMINMAX", "_WIN32_WINNT=0x0A00", "NTDDI_VERSION=0x0A00000A", "CEF_API_VERSION=CEF_API_VERSION_LAST"]
+    },
+    {
+      "file": "native/fenestra/browser_window.cpp",
+      "standard": "c++20",
+      "includes": ["native"],
+      "packages": ["orbis-cef-152", "orbis-tela"],
+      "defines": ["UNICODE", "_UNICODE", "NOMINMAX", "_WIN32_WINNT=0x0A00", "NTDDI_VERSION=0x0A00000A", "CEF_API_VERSION=CEF_API_VERSION_LAST", "CEF_USE_BOOTSTRAP"]
+    },
+    {
+      "file": "native/fenestra/toolbar.cpp",
+      "standard": "c++20",
+      "includes": ["native"],
+      "packages": ["orbis-tela"],
+      "defines": ["UNICODE", "_UNICODE", "NOMINMAX", "_WIN32_WINNT=0x0A00", "NTDDI_VERSION=0x0A00000A", "CEF_API_VERSION=CEF_API_VERSION_LAST", "CEF_USE_BOOTSTRAP"]
+    }
+  ],
+  "web": []
+}
